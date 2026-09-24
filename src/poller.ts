@@ -77,6 +77,9 @@ const INITIAL_BACKOFF_MS = 1_000;
 /** Maximum backoff in milliseconds for Telegram send retries. */
 const MAX_BACKOFF_MS = 10_000;
 
+/** Maximum time to wait for a single Telegram send attempt. */
+const SEND_TIMEOUT_MS = 10_000;
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function errMessage(err: unknown): string {
@@ -91,7 +94,7 @@ function errMessage(err: unknown): string {
  * transient failures from dropping notifications while avoiding infinite
  * retries that would block the poller loop.
  */
-async function sendWithRetry(
+export async function sendWithRetry(
   send: (text: string) => Promise<void>,
   text: string,
 ): Promise<void> {
@@ -99,8 +102,14 @@ async function sendWithRetry(
   let backoff = INITIAL_BACKOFF_MS;
 
   while (true) {
+    let timer: NodeJS.Timeout | undefined;
     try {
-      await send(text);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Telegram send timed out")), SEND_TIMEOUT_MS);
+      });
+      const p = send(text);
+      p.catch(() => {}); // Prevent unhandled rejection if it fails after timeout
+      await Promise.race([p, timeoutPromise]);
       return;
     } catch (err) {
       attempt++;
@@ -114,6 +123,8 @@ async function sendWithRetry(
       await sleep(backoff);
       // Exponential backoff with cap
       backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 }

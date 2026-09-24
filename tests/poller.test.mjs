@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 
-import { createPoller } from "../dist/poller.js";
+import { createPoller, sendWithRetry } from "../dist/poller.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(here, "fixtures");
@@ -56,4 +56,27 @@ test("poller replays fixtures and handles Telegram failure safely", async () => 
   } finally {
     await rm(config.cursorFile, { force: true }).catch(() => {});
   }
+});
+
+test("sendWithRetry times out individual hangs and bounds retries", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "clearTimeout"] });
+
+  let attempts = 0;
+  const hangingSend = async (text) => {
+    attempts++;
+    // Never resolve to simulate a hang
+    return new Promise(() => {});
+  };
+
+  const p = sendWithRetry(hangingSend, "test");
+  
+  // Advance time to trigger the timeout for 3 attempts + 3 backoffs.
+  // We need to advance asynchronously to allow promises to settle.
+  for (let i = 0; i < 5; i++) {
+    t.mock.timers.tick(15000); // More than 10s timeout
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  await assert.rejects(p, { message: "Telegram send timed out" });
+  assert.equal(attempts, 3, "should have attempted 3 times before finally throwing the exhaustion error");
 });
