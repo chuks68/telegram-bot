@@ -9,17 +9,15 @@ permissions:
   contents: read
 
 
-# CI compiles only. There are deliberately no live network calls here: the
-# poller's correctness against real chain data is verified with `npm run scan`
-# against Testnet by hand, and a CI job that depended on a public RPC and a
-# Telegram token would fail for reasons that have nothing to do with the commit.
+# CI is deterministic: no live RPC or Telegram calls. The poller's chain
+# correctness against live data is verified separately with `npm run scan`.
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

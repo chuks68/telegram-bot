@@ -14,8 +14,8 @@
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test tests/format.test.mjs tests/health.test.mjs tests/fixtures.test.mjs tests/poller.test.mjs",
-    "scan": "tsx src/stellar/events.ts"
+"test": "npm run build && node --test tests/format.test.mjs tests/health.test.mjs tests/fixtures.test.mjs tests/poller.test.mjs",
+"scan": "tsx src/stellar/events.ts"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.2.0",
