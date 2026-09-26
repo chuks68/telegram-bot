@@ -35,6 +35,7 @@ function baseStatus(overrides = {}) {
     lastSuccessAt: 5_000,
     latestLedger: 42,
     oldestLedger: 1,
+    chainClockAt: 5_000,
     notificationsSent: 2,
     notificationsFailed: 0,
     eventsSkipped: 1,
@@ -155,6 +156,9 @@ test("GET /health returns 200 and redacted JSON for a healthy poller", async () 
     const body = await res.json();
     assert.equal(body.ok, true);
     assert.equal(body.status, "ok");
+    // Chain clock: baseStatus saw chain time at 5_000, the probe runs at 5_500.
+    assert.equal(body.poller.chainClockAt, new Date(5_000).toISOString());
+    assert.equal(body.poller.chainClockSkewMs, 500);
     const text = JSON.stringify(body);
     assert.equal(text.includes(secret), false);
     assert.equal(text.includes(chat), false);
@@ -184,6 +188,49 @@ test("GET /health boundary: first boot before any success stays ok", () => {
   );
   assert.equal(report.ok, true);
   assert.equal(report.status, "ok");
+});
+
+test("buildHealthReport surfaces a draining shutdown without calling it degraded", () => {
+  // Stale success + repeated failures would be degraded for a running poller;
+  // a deliberate drain is doing what it was told to do.
+  const report = buildHealthReport(
+    baseConfig({ healthStaleMs: 1 }),
+    baseStatus({
+      stopping: true,
+      pendingFlush: true,
+      notificationsDropped: 3,
+      lastFlushAt: 6_000,
+      lastSuccessAt: 1_000,
+      consecutiveFailures: 10,
+    }),
+    5_500,
+  );
+
+  assert.equal(report.ok, true);
+  assert.equal(report.status, "ok");
+  assert.equal(report.poller.stopping, true);
+  assert.equal(report.poller.pendingFlush, true);
+  assert.equal(report.poller.notificationsDropped, 3);
+  assert.equal(report.poller.lastFlushAt, new Date(6_000).toISOString());
+});
+
+test("buildHealthReport reports stopped once a shutdown has finished", () => {
+  const report = buildHealthReport(
+    baseConfig(),
+    baseStatus({ running: false, stopping: true }),
+    5_500,
+  );
+  assert.equal(report.ok, false);
+  assert.equal(report.status, "stopped");
+  assert.equal(report.poller.stopping, true);
+});
+
+test("buildHealthReport fills in the shutdown fields when a status omits them", () => {
+  const report = buildHealthReport(baseConfig(), baseStatus(), 5_500);
+  assert.equal(report.poller.stopping, false);
+  assert.equal(report.poller.pendingFlush, false);
+  assert.equal(report.poller.notificationsDropped, 0);
+  assert.equal(report.poller.lastFlushAt, null);
 });
 
 test("createBot /health command replies with exact MarkdownV2 payload for healthy poller", async () => {

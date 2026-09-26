@@ -230,7 +230,13 @@ test("soak: real timers, one scheduled poll at most, none after stop()", { timeo
       throw new Error(`RPC down ${TOKEN}`);
     },
   };
-  const poller = createPoller({ config, server: failingServer, send: async () => undefined });
+  const poller = createPoller({
+    config,
+    server: failingServer,
+    send: async () => undefined,
+    // This test measures timer hygiene under sustained failure; keep the breaker from pausing RPC calls.
+    circuitBreakerOptions: { failureThreshold: Number.POSITIVE_INFINITY },
+  });
   const timeouts = () => process.getActiveResourcesInfo().filter((r) => r === "Timeout").length;
   const baseline = timeouts();
   let peak = 0;
