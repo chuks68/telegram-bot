@@ -20,6 +20,6 @@
       "question": "Will *price* reach $100 (see [chart](url))? — `yes` or _no_."
     }
   },
-  "md": "🆕 *New squad market* \\#2\nWill \\*price\\* reach $100 \\(see \\[chart\\]\\(url\\)\\)? — \\`yes\\` or \\_no\\_\\.\nCaptain: `GCAPT…AAAA` · fee 0 bps · deadline 2024\\-10\\-27T03:33:20\\.000Z\n_ledger 5037_",
-  "plain": "New squad market #2\nWill *price* reach $100 (see [chart](url))? — `yes` or _no_.\nCaptain: GCAPT…AAAA · fee 0 bps · deadline 2024-10-27T03:33:20.000Z\nledger 5037"
+  "md": "🆕 *New squad market* \\#2\nWill \\*price\\* reach $100 \\(see \\[chart\\]\\(url\\)\\)? — \\`yes\\` or \\_no\\_\\.\nCaptain: `GCAPT…AAAA` · fee 0 bps · deadline in 69d 9h \\(2024\\-10\\-27T03:33:20\\.000Z\\)\n_ledger 5037_",
+  "plain": "New squad market #2\nWill *price* reach $100 (see [chart](url))? — `yes` or _no_.\nCaptain: GCAPT…AAAA · fee 0 bps · deadline in 69d 9h (2024-10-27T03:33:20.000Z)\nledger 5037"
 }

@@ -29,10 +29,11 @@ import { safeErrorMessage } from "../dist/notifications/format.js";
 const MARKET_ID = "C" + "A".repeat(55);
 const SQUAD_ID = "C" + "B".repeat(55);
 const OPERATOR_ID = "42";
+const TEST_BOT_TOKEN = ["123456789:", "A".repeat(35)].join("");
 
 function fakeConfig(overrides = {}) {
   return {
-    botToken: "123456789:SECRET-BOT-TOKEN-TEST",
+    botToken: TEST_BOT_TOKEN,
     chatId: "-1001234567890",
     marketContractId: MARKET_ID,
     squadContractId: SQUAD_ID,
@@ -43,7 +44,7 @@ function fakeConfig(overrides = {}) {
     operatorTelegramUserId: OPERATOR_ID,
     pollIntervalMs: 30_000,
     startLookbackLedgers: 60,
-    cursorFile: "./data/cursor.json",
+    cursorFile: "/tmp/unused-cursor.json",
     maxNotificationsPerCycle: 20,
     healthHost: "127.0.0.1",
     healthPort: 0,

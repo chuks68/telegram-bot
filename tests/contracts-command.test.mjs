@@ -17,7 +17,7 @@ function fakeConfig(overrides = {}) {
     networkPassphrase: "Test SDF Network ; September 2015",
     pollIntervalMs: 30_000,
     startLookbackLedgers: 60,
-    cursorFile: "./data/cursor.json",
+    cursorFile: "/tmp/unused-cursor.json",
     maxNotificationsPerCycle: 20,
     ...overrides,
   };

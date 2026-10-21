@@ -72,3 +72,7 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: End-to-end smoke test
+        if: matrix.node-version == 22
+        run: node scripts/e2e-smoke.mjs

@@ -120,7 +120,7 @@ function baseConfig(overrides = {}) {
     operatorTelegramUserId: null,
     pollIntervalMs: 30_000,
     startLookbackLedgers: 60,
-    cursorFile: "./data/cursor.json",
+    cursorFile: "/tmp/unused-cursor.json",
     maxNotificationsPerCycle: 20,
     healthHost: "127.0.0.1",
     healthPort: 0,
@@ -173,7 +173,7 @@ test("mock profile loads without any environment variables", () => {
     assert.equal(config.rpcUrl, `http://127.0.0.1:${MOCK_RPC_DEFAULT_PORT}`);
     assert.equal(config.marketContractId, MOCK_MARKET_CONTRACT_ID);
     assert.equal(config.squadContractId, MOCK_SQUAD_CONTRACT_ID);
-    assert.equal(config.cursorFile, path.resolve("./data/cursor.mock.json"));
+    assert.equal(config.cursorFile, path.resolve("./data/cursor.mock.json")); // hermetic-data: allow
     assert.equal(config.networkPassphrase, MOCK_NETWORK_PASSPHRASE);
     assert.equal(networkLabel(config), "mock");
     assert.equal(config.botToken, "MOCK-PROFILE-NOT-A-BOT-TOKEN");

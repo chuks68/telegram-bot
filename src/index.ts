@@ -255,6 +255,11 @@ async function main(): Promise<void> {
     config,
     server,
     send: (text, source, extra) => notify(text, source, extra),
+    notifyOperator: config.operatorTelegramUserId
+      ? async (text: string) => {
+          await bot.api.sendMessage(config.operatorTelegramUserId!, text);
+        }
+      : undefined,
     audit,
     metrics,
   });

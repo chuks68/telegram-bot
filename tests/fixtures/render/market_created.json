@@ -1,0 +1,21 @@
+{
+  "source": "squad",
+  "contractId": "CBPGVXHXLULUBVZ24D6XNSUX7NH45HYXGWHAJFWTBHXYNO72KDRKCDFY",
+  "version": "v1",
+  "ledger": 1000000,
+  "txHash": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "at": 1770000000,
+  "eventId": "1000000-1",
+  "eventType": "contract",
+  "transactionIndex": 0,
+  "operationIndex": 0,
+  "inSuccessfulContractCall": true,
+  "payload": {
+    "name": "market_created",
+    "marketId": 1,
+    "question": "Will Stellar process 1M Soroban operations in 24 hours?",
+    "captain": "GDZCB3D6JXIJCALSXQELCS6YUEWJWG5DFXQK5PJ5I7MWI6KVMQJBC5DLPKZI",
+    "feeBps": 100,
+    "deadline": 1770000000
+  }
+}

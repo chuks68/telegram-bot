@@ -19,7 +19,7 @@ cursor follows the normal poller rules; truncation affects only the Telegram
 presentation, not chain data or persisted cursor state.
 
 Notification text from contract String fields is bounded to 200 Unicode code
-points before MarkdownV2 escaping. An oversized or malformed transaction hash
+points before Markdownv2 escaping. An oversized or malformed transaction hash
 does not receive an explorer link. The original event is still decoded and the
 cursor follows the normal poller rules; truncation affects only the Telegram
 presentation, not chain data or persisted cursor state.
@@ -36,7 +36,7 @@ Or for full poller state details:
 
 ```bash
 /status
-```
+@``
 
 Check:
 
@@ -80,7 +80,7 @@ numbers as `poller.chainClockAt` and `poller.chainClockSkewMs`.
   no events for the watched contracts.
 
 The clock only advances from a `ledgerClosedAt` the RPC actually returned, so it
-freezes during RPC failures, an open circuit breaker, an operator pause, or a
+freezes during R-PC failures, an open circuit breaker, an operator pause, or a
 stretch with no events, and the skew then grows on its own. It is saved with the
 cursors, so a restart resumes it instead of reporting `unknown`.
 
@@ -128,6 +128,9 @@ Do not manually advance the cursor to skip an RPC failure.
 
 ## Telegram failures
 
+For a quick mapping of raw Telegram error messages to fixes, see the
+[Telegram Troubleshooting FAQ](telegram-troubleshooting.md).
+
 ### Symptoms
 
 * Event scanning continues but sends fail.
@@ -150,7 +153,9 @@ infinite replay, and replaying every missed notification could create an
 unbounded backlog or flood a recovered chat. Instead the formatted message is
 parked on the local dead-letter queue (`DEAD_LETTER_FILE`, default
 `data/dead-letter.json`) and replayed on later cycles once Telegram accepts
-sends again. The log reports the sent/failed/skipped counts for that commit.
+sends again. See [Dead-Letter Queue documentation](dead-letter-queue.md) for details
+on file format, entry fields, inspection with `jq`, retry limits, and queue management.
+The log reports the sent/failed/skipped counts for that commit.
 
 Each individual Telegram send is bounded by `TELEGRAM_SEND_TIMEOUT_MS` (default
 `10000`). A send that exceeds this deadline is aborted and counted as a failure
@@ -181,7 +186,6 @@ preserve the quarantined copy for investigation.
 
 A syntactically valid cursor that Soroban rejects as stale is first checked
 against a fresh `getHealth()`:
-
 Timing out an individual send does not change cursor behavior: the cursor still
 advances only after the returned page is processed, and a timed-out send is
 treated exactly like any other failed send.
@@ -200,7 +204,7 @@ A floor rewind loses nothing that is still readable — everything below the flo
 has already left the RPC. It can, however, skip events that expired while the bot
 was down, which the chain still records.
 
-A cursor the token itself places **ahead of the chain tip** is refused locally
+A cursor the token itself places **aead of the chain tip** is refused locally
 with a bounded `ahead of the chain tip` error instead of being sent, and the
 stored cursor is kept unchanged. That can be a transient RPC-lag condition and
 clears as the tip advances; if it persists it means the cursor came from a
@@ -214,7 +218,7 @@ cold-start with the configured `START_LOOKBACK_LEDGERS` after checking the
 retained-history floor. A cold start may produce duplicate notifications, but it
 does not replay all retained history.
 
-Before changing `CURSOR_FILE` or deleting persisted state, preserve the existing file for investigation if possible.
+Before changing `CURSOR_FILE` or deleting persisted state, preserve the existing file for investigation if possible. For an exhaustive reference of all on-disk files, writers, and recovery behaviors, see [On-Disk State Files](state-files.md).
 
 If the stored cursor is confirmed incompatible or permanently outside RPC retention, stop the notifier, preserve the cursor file for investigation, and deliberately perform a cold start with the configured `START_LOOKBACK_LEDGERS` after checking the retained-history floor. This may produce duplicate notifications, but it does not skip or replay all retained history.
 
@@ -231,319 +235,9 @@ Keep the backup on persistent storage and preferably outside the directory
 being replaced.
 
 ```bash
-npm run cursor -- backup --out /safe-storage/cursor-before-recovery.json
+npm run cursor -- backup --out data/cursor-backup.json
 ```
 
-Restore only after stopping the notifier. The command takes
-`INSTANCE_LOCK_FILE` (default `data/poller.lock`) for the duration of the
-atomic replacement, so it fails if a live bot owns the cursor. Existing cursor
-state is never replaced without `--force`:
-
-```bash
-npm run cursor -- restore --from /safe-storage/cursor-before-recovery.json --force
-```
-
-The backup must be valid version 1 or a supported legacy cursor file. Malformed
-or future-version backups are rejected without changing the live file. Legacy
-files are normalized to version 1 on restore, including their known dedup
-state. If restore reports a lock error, stop the owning process; only remove a
-leftover lock manually after verifying that no notifier is running. After
-restart, confirm `/status` shows the restored cursor and polling advances.
-
-Restoring reader state does not recover Telegram sends already dropped under
-normal lossy-delivery rules. It can replay events after the restored cursor or
-skip newer events if the backup is old; Stellar remains the source of truth.
-On Railway, run the command with the same persistent `/app/data` volume as the
-service, or mount the backup location separately. Keep the original cursor and
-backup until the restarted release is healthy so another restore or release
-rollback remains possible.
-
-## Process restart
-
-### Stopping the process
-
-`SIGTERM`/`SIGINT` starts a bounded drain instead of killing the loop:
-
-1. New poll cycles stop being scheduled and `/status` reports `stopping`.
-2. Notifications not yet sent are dropped and counted
-   (`dropped during shutdown`), with one bounded log line. The chain, not
-   Telegram, remains the record.
-3. The cycle in progress is given `SHUTDOWN_TIMEOUT_MS` (default `10000`) to
-   finish and write its cursors.
-4. Any cursor state still only in memory is flushed to `CURSOR_FILE`, then the
-   health endpoint and the Telegram long-poll are closed and the process exits
-   `0`.
-5. If that teardown itself wedges, the process exits `1` after
-   `SHUTDOWN_TIMEOUT_MS + 10000` ms. The flush has already happened by then.
-
-Send a second `SIGTERM`/`SIGINT` only if the drain is genuinely stuck: it exits
-immediately (`130`/`143`) and skips the flush. The cursor file itself cannot be
-truncated by that, because it is written to a temporary file and renamed.
-
-After a drain, `GET /health` reports `poller.stopping` and `poller.pendingFlush`.
-`pendingFlush: true` after the process should have exited means the flush did
-not land — check disk permissions and the persistent volume before restarting.
-
-### Persistent deployment
-
-Ensure `data/` or the path configured by `CURSOR_FILE` is on persistent storage.
-
-After a restart:
-
-1. Check `/status`.
-2. Confirm the persisted cursor is present.
-3. Confirm polling resumes normally.
-4. Check that counters and last-event ledgers begin advancing again.
-5. Check for a restart gap (see [Restart gaps](#restart-gaps)): a downtime longer
-   than the RPC's retained window shows up there, not as an error.
-
-### Ephemeral deployment
-
-If the filesystem is ephemeral, every restart behaves like a cold start. Events that occurred while the process was down may not be posted.
-
-Use persistent storage for long-running deployments.
-
-## Railway deployment
-
-The Railway deployment (`railway.json`) mounts a persistent volume at `/app/data` and requires it via `requiredMountPath` — Railway refuses to start the service until a volume exists at that path.
-
-A redeploy of a volume-backed service has a short downtime window: Railway allows only one active deployment per volume at a time. Rollback redeploys the previous revision; the volume is preserved and the cursor survives.
-
-Verify after deployment and during incidents:
-
-1. Confirm the volume is attached at `/app/data` (injected as `RAILWAY_VOLUME_MOUNT_PATH`).
-2. Confirm `HEALTH_HOST=0.0.0.0` is set — Railway's healthcheck probe crosses the container network and cannot reach a loopback-only `/health` listener. The health port follows the injected `PORT` when `HEALTH_PORT` is unset.
-3. Confirm the persisted cursor lives at `/app/data/cursor.json` and `/status` shows a non-empty cursor.
-4. Confirm `/health` responds `200` in the Rails health tab after the first successful poll.
-
-Do not delete `/app/data` cursor state as part of a normal rollback.
-
-## Rate limiting
-
-Notification bursts are bounded by `MAX_NOTIFICATIONS_PER_CYCLE`: each cycle
-reads one RPC page of that size, commits its page cursor, and then spaces sends
-out. A restart therefore replays at most one bounded page.
-
-If Telegram rate limits are observed:
-
-1. Confirm the process remains alive.
-2. Check `/status` for send errors.
-3. Do not disable the notification cap to compensate.
-4. Allow subsequent polling cycles to continue normally.
-
-If sends are timing out rather than being rate limited, confirm
-`TELEGRAM_SEND_TIMEOUT_MS` is set to a value appropriate for the deployment's
-network path before raising it; the default is chosen to keep a single slow
-send from delaying the rest of the cycle.
-
-Do not manually replay large event ranges into Telegram.
-
-## Malformed or unexpected events
-
-A malformed event must not crash the long-running process. XDR conversion and
-event metadata failures are converted to a skipped `unknown` event with a
-bounded reason. The RPC response cursor is retained, so later events in the
-page and later pages remain eligible for processing; no cursor rewind or
-guessed ledger is performed.
-
-`decodeEvent` converts malformed XDR and events introduced by a newer contract
-deployment into a bounded `unknown` record. The poller logs only the contract,
-event name, ledger, and a clipped reason, skips Telegram delivery for that
-event, and continues with the RPC cursor returned by the scan. This protects
-the long-running reader while preserving the chain as the source of truth.
-
-`decodeEvent` converts malformed XDR and events introduced by a newer contract
-deployment into a bounded `unknown` record. The poller logs only the contract,
-event name, ledger, and a clipped reason, skips Telegram delivery for that
-event, and continues with the RPC cursor returned by the scan. This protects
-the long-running reader while preserving the chain as the source of truth.
-
-When investigating:
-
-1. Use `npm run scan` to inspect the affected event range.
-2. Confirm the contract and ledger involved.
-3. Check the bounded event name and decode reason without copying unrestricted remote payloads into logs or tickets.
-4. Preserve the existing cursor behavior.
-
-Do not modify on-chain state or attempt to repair an event by writing to the Mimir contracts.
-
-## Configuration looks applied but is not
-
-### Symptoms
-
-* Telegram answers `401 Unauthorized` for a token that is set in `.env`.
-* Notifications arrive in a chat nobody configured, or in none at all.
-* A value edited in `.env` has no effect after a restart.
-
-### Recovery
-
-Ask the running process where its configuration came from. The report contains
-key names and origins only — never a value — so it is safe to attach to a ticket:
-
-```bash
-curl -s http://127.0.0.1:8787/health | jq .config
-```
-
-* `envFile.present: false` — the process never found `.env`. The file resolves
-  against the working directory, so a supervisor that starts the bot elsewhere
-  silently runs on defaults; start it from the directory holding the file.
-* `envFile.suppliedKeys: 0` with `present: true` — the file was read but supplied
-  none of the known settings. Check for a typo'd key name.
-* `entries[].source: "profile-default"` for `BOT_TOKEN` — `MIMIR_PROFILE=mock` is
-  active and placeholder credentials are in use.
-* `emptyDeclaration: true` — the variable is declared with no value, so a profile
-  or built-in default wins. This is the most common "I set it and nothing
-  changed".
-* `source: "process-env"` where a file value was expected — a variable already
-  set by the platform, systemd, or the shell wins over `.env`; the file is never
-  allowed to overwrite it.
-
-Fix the source, not the symptom: restart only once the report names the source
-you intended for that setting.
-
-## Safe rollback
-
-For a deployment containing only documentation or operational changes:
-
-1. Stop the affected deployment according to its hosting platform's procedure.
-   A `SIGTERM` drains: cursors are flushed and unsent notifications are dropped
-   and counted. Use `/pause` only to stop scheduling while leaving the process
-   available.
-2. Revert to the previously known-good application revision.
-3. Preserve the persistent `data/` volume.
-4. Restart the known-good revision.
-5. Check `/status`.
-6. Verify that the persisted cursor is still present and polling resumes.
-
-Do not delete cursor state as part of a normal rollback.
-
-## Deployment checklist
-
-Before deployment:
-
-* `.env` contains valid configuration without exposing secrets in source control.
-* `BOT_TOKEN` and `TELEGRAM_CHAT_ID` are supplied through the deployment secret/configuration mechanism.
-* `data/` or `CURSOR_FILE` is persistent — on Railway, a volume attached at `/app/data` (see `railway.json`).
-* The deployed revision passes typecheck and build checks.
-* No production credentials are committed.
-* Confirm the expected version appears in `GET /health` (`"version"` field) and in the `[boot]` log line after startup.
-
-After deployment:
-
-* Confirm the process starts successfully.
-* Run `/status`.
-* Confirm the `[boot] config` line (or `/health` `.config`) shows the sources you
-  intended — for a deployment with a `.env`, `envFile.present: true` and the
-  bot token's source reported as `env-file`, not `profile-default`.
-* Confirm the expected contract IDs and cursor are shown.
-* Record the latest correlation ID when investigating a specific poll cycle.
-* Confirm the last event ledger advances after new events.
-* Monitor RPC and Telegram errors.
-
-## Security and logging
-
-Never log:
-
-* Telegram bot tokens
-* private keys or signing material
-* payment proofs
-* unrestricted remote API responses
-* sensitive authentication data
-
-Configuration provenance reports are the exception that proves the rule: the
-boot `[boot] config` line and the `/health` `config` section name settings and
-their sources, so they can be shared verbatim. They are built so that a value —
-token, chat id, or otherwise — cannot appear in them.
-
-When reporting an incident, include only the minimum information needed to identify the failure, such as contract, ledger, cursor state, error category, and timestamp.
-
-## Rehearsing locally (mock profile)
-
-Every failure mode in this runbook can be drilled on a laptop against the
-local mock profile — loopback only, no bot token, no Testnet, and an isolated
-`data/cursor.mock.json` that never overlaps a real bot's cursor:
-
-```bash
-npm run mock:poll -- --fail-events error   # RPC failure drill (see "RPC failures")
-npm run mock:poll -- --stale-cursor        # stale cursor drill (see "Stale or corrupt cursor")
-npm run mock:poll -- --malformed           # undecodable event drill
-npm run mock:poll                          # healthy dry run; sends are logged, not delivered
-curl -s http://127.0.0.1:8787/health | jq .status
-```
-
-Injected failures last until the process stops, so recovery is "restart without
-the flag": the cursor must resume exactly where it was, log lines stay bounded,
-and no token-shaped secret appears anywhere in the output. `--stale-cursor`
-rejects any resume cursor the mock has handed out; because that cursor is inside
-the retained window, the poller keeps it (a rewind happens only when a fresh
-`getHealth()` proves the cursor is *below* the floor). The same guarantees are
-asserted by `tests/mock-rpc.test.mjs` (`npm run test:mock`), and the bounded
-rewind path is covered by `tests/cursor-rewind.test.mjs`.
-
-## Verification
-
-Before merging operational changes, run the repository's documented checks:
-
-```bash
-npm run typecheck
-npm run build
-npm test
-```
-
-### Incident drill simulation
-
-Exercise the automated incident drill script to verify notifier resilience across simulated RPC failures, Telegram delivery failures, stale/corrupt cursors, bursts, restarts, and malformed events without requiring live Testnet or Telegram credentials:
-
-```bash
-npm run drill
-```
-
-Or run via the scanner CLI:
-
-```bash
-npm run scan -- --drill
-```
-
-Specific failure modes can be drilled individually:
-
-```bash
-npm run drill -- --scenario rpc-failure
-npm run drill -- --scenario telegram-failure
-npm run drill -- --scenario stale-cursor
-npm run drill -- --scenario corrupt-cursor
-npm run drill -- --scenario malformed-event
-npm run drill -- --scenario rate-limit
-npm run drill -- --scenario restart
-npm run drill -- --scenario scanner-diagnostic
-```
-
-Machine-readable JSON reporting is supported:
-
-```bash
-npm run drill -- --json
-```
-
-Also verify the command-level diagnostic path against live Testnet where applicable:
-
-```bash
-npm run scan
-```
-
-The notifier should remain read-only throughout incident recovery. The chain remains the source of truth even when Telegram delivery is unavailable.
-
-## Corrupt cursor file
-
-### Symptoms
-
-* Startup logs show a quarantined cursor path (`*.corrupt.<timestamp>`).
-* `/status` shows null/cold cursors after a restart that previously had resume positions.
-* A brief lookback replay of recent events may appear in the chat (bounded by `START_LOOKBACK_LEDGERS`).
-
-### Recovery
-
-1. Confirm the live `CURSOR_FILE` path (default `data/cursor.json`) was removed or renamed.
-2. Inspect the quarantined sibling file for truncation or unexpected shape — do not paste bot tokens or secrets into tickets.
-3. Leave the quarantine file in place for forensics; the poller will write a fresh cursor on the next successful cycle.
-4. Do not manually invent cursor strings. If you must force a lookback window, delete only the live cursor file and restart (or rely on the automatic quarantine path).
-
-The chain remains the source of truth; quarantining never signs transactions or skips retained events beyond the configured lookback.
+Restore only after stopping the notifier. See [Cursor CLI reference](../README.md#cursor-backup-and-restore)
+for the full subcommand and flag reference, including how to inspect a cursor
+file and what `--force` overrides.

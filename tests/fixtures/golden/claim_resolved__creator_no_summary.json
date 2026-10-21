@@ -20,6 +20,6 @@
       "evidenceHash": "cafecafe"
     }
   },
-  "md": "⚖️ *Claim \\#21 resolved* — winner: *creator*\nConfidence: 100%\n_ledger 5010_",
-  "plain": "Claim #21 resolved — winner: creator\nConfidence: 100%\nledger 5010"
+  "md": "⚖️ *Claim \\#21 resolved* — winner: *creator*\nConfidence: ██████████ 100%\n_ledger 5010_",
+  "plain": "Claim #21 resolved — winner: creator\nConfidence: ██████████ 100%\nledger 5010"
 }

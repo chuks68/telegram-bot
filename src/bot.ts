@@ -20,6 +20,7 @@ import {
   type ExplorerKeyboard,
 } from "./notifications/format.js";
 import { formatFeatureFlags } from "./notifications/featureFlags.js";
+import { DEFAULT_SILENT_EVENTS, isSilent } from "./notifications/priority.js";
 export { previewMessage } from "./notifications/format.js";
 import { formatProvenanceSummary, networkLabel, type BotConfig } from "./config.js";
 import { contractExplorerUrl } from "./stellar/client.js";
@@ -42,16 +43,35 @@ import {
   PAUSE_MESSAGES,
   RESUME_MESSAGES,
 } from "./i18n.js";
+import { helpDetailMessage } from "./commands/help-detail.js";
+import { aboutMessage } from "./commands/about.js";
+export { helpDetailMessage, COMMAND_DETAILS, type CommandDetail } from "./commands/help-detail.js";
+import { handlePingCommand } from "./commands/ping.js";
+export {
+  handlePingCommand,
+  pingCommand,
+  pongMessage,
+  formatPong,
+  type PingDeps,
+  type Clock,
+} from "./commands/ping.js";
+import {
+  handleBroadcastCallback,
+  registerBroadcastHandlers,
+  type BroadcastStore,
+} from "./commands/broadcast.js";
 
 /** Shared metadata for handlers, help, and Telegram's command menu. */
-const COMMANDS = [
+export const COMMANDS = [
   { command: "start", description: COMMAND_DESCRIPTIONS.start, operatorOnly: false },
   { command: "help", description: COMMAND_DESCRIPTIONS.help, operatorOnly: false },
+  { command: "about", description: COMMAND_DESCRIPTIONS.about, operatorOnly: false },
   { command: "status", description: COMMAND_DESCRIPTIONS.status, operatorOnly: false },
   { command: "audit", description: COMMAND_DESCRIPTIONS.audit, operatorOnly: true },
   { command: "contracts", description: COMMAND_DESCRIPTIONS.contracts, operatorOnly: false },
   { command: "health", description: COMMAND_DESCRIPTIONS.health, operatorOnly: false },
   { command: "preview", description: COMMAND_DESCRIPTIONS.preview, operatorOnly: false },
+  { command: "ping", description: COMMAND_DESCRIPTIONS.ping, operatorOnly: false },
   { command: "pause", description: COMMAND_DESCRIPTIONS.pause, operatorOnly: true },
   { command: "resume", description: COMMAND_DESCRIPTIONS.resume, operatorOnly: true },
 ] as const;
@@ -61,8 +81,55 @@ function visibleCommands(config?: BotConfig) {
     !command.operatorOnly || config === undefined || config.operatorTelegramUserId !== null,
   );
 }
+export {
+  handleBroadcastCallback,
+  registerBroadcastHandlers,
+  handleBroadcastCommand,
+  getConfiguredBroadcastChats,
+  BroadcastStore,
+  sendBroadcast,
+} from "./commands/broadcast.js";
 
-export function helpMessage(config: BotConfig): string {
+/**
+ * How long a pause-confirmation message stays valid.
+ * Callbacks arriving after this window are rejected as stale.
+ */
+export const PAUSE_CONFIRM_TTL_MS = 60_000;
+
+/**
+ * The two callback_data strings used by the pause confirmation flow.
+ * Both are well under Telegram's 64-byte limit.
+ */
+export const CALLBACK_PAUSE_CONFIRM = "pause-confirm" as const;
+export const CALLBACK_PAUSE_CANCEL = "pause-cancel" as const;
+
+/** Inline keyboard attached to the pause confirmation message. */
+export function pauseConfirmationKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("✅ Confirm pause", CALLBACK_PAUSE_CONFIRM)
+    .text("❌ Cancel", CALLBACK_PAUSE_CANCEL);
+}
+
+type PauseCallbackAction = typeof CALLBACK_PAUSE_CONFIRM | typeof CALLBACK_PAUSE_CANCEL;
+
+export function validatePauseCallbackData(data: unknown): PauseCallbackAction | null {
+  return data === CALLBACK_PAUSE_CONFIRM || data === CALLBACK_PAUSE_CANCEL ? data : null;
+}
+
+const HELP_BASE = [
+  "*Mimir notifier*",
+  "",
+  "I watch Mimir's two Soroban contracts on Stellar and post every new on-chain event here: claims opened, challenges staked, oracle resolutions, settlements and payouts\\.",
+  "",
+  "/status — what I am watching and how far I have read",
+  "/contracts — the contract ids I watch and where to look them up",
+  "/health — health assessment and operational readiness",
+  "/preview — preview channel notification formatting",
+  "/help — this message",
+];
+
+export function helpMessage(config?: BotConfig): string {
+  if (!config || config.operatorTelegramUserId === null) return HELP_BASE.join("\n");
   return [
     HELP_TITLE,
     "",
@@ -83,7 +150,7 @@ export const TELEGRAM_OPTIONS = {
 // Callback data is untrusted user input: it is validated before any action
 // runs, and operator actions are authorized exactly like /pause and /resume.
 
-export type CallbackActionType = "status" | "contracts" | "help" | "pause" | "resume";
+export type CallbackActionType = "status" | "contracts" | "help" | "pause" | "resume" | "broadcast";
 
 export interface ValidCallbackAction {
   type: CallbackActionType;
@@ -108,7 +175,7 @@ export const CALLBACK_UNAUTHORIZED_FEEDBACK = "Unauthorized: operator only";
 
 
 function isKnownAction(val: string): val is CallbackActionType {
-  return ["status", "contracts", "help", "pause", "resume"].includes(val);
+  return ["status", "contracts", "help", "pause", "resume", "broadcast"].includes(val);
 }
 
 /**
@@ -235,7 +302,6 @@ export function operatorKeyboard(): InlineKeyboard {
     .row()
     .text("📊 Status", "status");
 }
-
 
 function ago(timestamp: number | null, nowMs: number = Date.now()): string {
   if (timestamp === null) return "never";
@@ -522,11 +588,63 @@ export function resumeMessage(result: PollerResumeResult): string {
   }
 }
 
+/**
+ * Shared handler for pause inline-keyboard callbacks.
+ *
+ * Exported for unit testing without needing a live grammy `Bot` instance.
+ * Callers must pass a grammy-compatible `ctx` that exposes:
+ *   - `ctx.from`
+ *   - `ctx.callbackQuery.data`
+ *   - `ctx.callbackQuery.message.date` (Unix seconds, set by Telegram)
+ *   - `ctx.answerCallbackQuery(text?, opts?)`
+ *   - `ctx.editMessageText(text, opts)`
+ */
+async function handlePauseCallback(
+  ctx: Context,
+  deps: Pick<BotDeps, "config" | "pause">,
+  nowMs: number = Date.now(),
+): Promise<void> {
+  const { config, pause } = deps;
+
+  const action = validatePauseCallbackData(ctx.callbackQuery?.data);
+  if (action === null) return; // unknown payload — silently ignore
+
+  // Only the operator may act on these buttons.
+  if (!isOperator(ctx, config)) {
+    await ctx.answerCallbackQuery({ text: "Only the operator can do that.", show_alert: true });
+    return;
+  }
+
+  // Reject stale confirmations so an old message cannot pause the bot later.
+  const messageDate = ctx.callbackQuery?.message?.date ?? 0;
+  const ageMs = nowMs - messageDate * 1000;
+  if (ageMs > PAUSE_CONFIRM_TTL_MS) {
+    await ctx.answerCallbackQuery({ text: "Confirmation expired.", show_alert: true });
+    await ctx.editMessageText("⏱ *Pause confirmation expired\\.* Run /pause again\\.", TELEGRAM_OPTIONS);
+    return;
+  }
+
+  if (action === CALLBACK_PAUSE_CONFIRM) {
+    const result = pause();
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText(pauseMessage(result), TELEGRAM_OPTIONS);
+    return;
+  }
+
+  if (action === CALLBACK_PAUSE_CANCEL) {
+    await ctx.answerCallbackQuery({ text: "Cancelled." });
+    await ctx.editMessageText("*Pause cancelled\\.* Polling continues\\.", TELEGRAM_OPTIONS);
+    return;
+  }
+}
+
 export interface BotDeps {
   config: BotConfig;
   status: () => PollerStatus;
   pause: () => PollerPauseResult;
   resume: () => PollerResumeResult;
+  /** Bot version string, typically read from package.json. */
+  version?: string | undefined;
   /** Live in-memory audit window; renders immediately even before a flush. */
   audit?: AuditLog | undefined;
   /** Where the audit JSONL file lives, for the file-backed report. */
@@ -538,6 +656,8 @@ export interface BotDeps {
   botInfo?: UserFromGetMe;
   /** Bounded redacted log ring backing /export. Absent = command disabled. */
   logs?: LogCapture | undefined;
+  /** In-memory broadcast confirmation store. */
+  broadcastStore?: BroadcastStore | undefined;
 }
 
 /**
@@ -550,7 +670,7 @@ export interface BotDeps {
  *   id (stored as a number in grammy's ctx.chat.id) and its string form are
  *   compared so that negative group ids such as -1001234567890 match correctly.
  */
-function isChatAllowed(allowedChatIds: readonly string[] | undefined, chatId: number): boolean {
+export function isChatAllowed(allowedChatIds: readonly string[] | undefined, chatId: number): boolean {
   // Hand-built configs (tests, embedders) may omit the list: treat it as open.
   if (!allowedChatIds || allowedChatIds.length === 0) return true;
   const asString = String(chatId);
@@ -583,10 +703,11 @@ async function replyMarkdown(
 
 /** Register command handlers on a grammy-compatible bot (also useful in tests). */
 export function registerCommandHandlers(
-  bot: Bot | { command: (name: string, handler: (ctx: CommandContext<Context>) => Promise<void>) => void },
+  bot: Bot | { command: (name: string, handler: (ctx: CommandContext<Context>) => Promise<void>) => void; callbackQuery?: (filter: string | string[], handler: (ctx: Context) => Promise<void>) => void },
   deps: BotDeps,
 ): void {
   const { config, status } = deps;
+  const version = deps.version ?? "unknown";
   const pause = deps.pause ?? (() => "stopped");
   const resume = deps.resume ?? (() => "stopped");
 
@@ -608,7 +729,22 @@ export function registerCommandHandlers(
     },
 
     help: async (ctx) => {
-      await replyMarkdown(ctx, helpMessage(config));
+      const text = ctx.message?.text ?? "";
+      const spaceIndex = text.indexOf(" ");
+      const arg = (
+        typeof ctx.match === "string" && ctx.match.trim().length > 0
+          ? ctx.match.trim()
+          : (spaceIndex !== -1 ? text.slice(spaceIndex + 1).trim() : "")
+      );
+      if (arg) {
+        await replyMarkdown(ctx, helpDetailMessage(arg, config));
+      } else {
+        await replyMarkdown(ctx, helpMessage(config));
+      }
+    },
+
+    about: async (ctx) => {
+      await replyMarkdown(ctx, aboutMessage(config, version));
     },
 
     status: async (ctx) => {
@@ -679,12 +815,19 @@ export function registerCommandHandlers(
       await ctx.reply(previewMessage(config, arg || "market"), TELEGRAM_OPTIONS);
     },
 
+    ping: async (ctx) => {
+      await handlePingCommand(ctx, { config });
+    },
+
     pause: async (ctx) => {
       if (!isOperator(ctx, config)) {
         console.warn(`[bot] ignored unauthorized /pause on update ${ctx.update.update_id}`);
         return;
       }
-      await ctx.reply(pauseMessage(pause()), TELEGRAM_OPTIONS);
+      await ctx.reply("⏸ *Pause polling?*\\nThis will stop new scans from starting\\. The current scan may finish\\.", {
+        ...TELEGRAM_OPTIONS,
+        reply_markup: pauseConfirmationKeyboard(),
+      });
     },
 
     resume: async (ctx) => {
@@ -698,6 +841,12 @@ export function registerCommandHandlers(
 
   for (const { command } of COMMANDS) {
     bot.command(command, handlers[command]);
+  }
+  if (!("on" in bot) && typeof bot.callbackQuery === "function") {
+    bot.callbackQuery(
+      [CALLBACK_PAUSE_CONFIRM, CALLBACK_PAUSE_CANCEL],
+      async (ctx) => handlePauseCallback(ctx, { config, pause }),
+    );
   }
 }
 
@@ -758,7 +907,13 @@ export async function updateOrReplyMessage(
 export async function handleCallbackQuery(
   ctx: Context,
   deps: BotDeps,
+  nowMs?: number,
 ): Promise<void> {
+  if (nowMs !== undefined || ctx.callbackQuery?.data === CALLBACK_PAUSE_CONFIRM || ctx.callbackQuery?.data === CALLBACK_PAUSE_CANCEL) {
+    await handlePauseCallback(ctx, { config: deps.config, pause: deps.pause }, nowMs);
+    return;
+  }
+
   const { config, status } = deps;
   const pause = deps.pause ?? (() => "stopped");
   const resume = deps.resume ?? (() => "stopped");
@@ -781,7 +936,7 @@ export async function handleCallbackQuery(
   const { action } = validation;
 
   // Enforce operator role authorization
-  if (action.type === "pause" || action.type === "resume") {
+  if (action.type === "pause" || action.type === "resume" || action.type === "broadcast") {
     if (!isOperator(ctx, config)) {
       console.warn(
         `[bot] ignored unauthorized callback /${action.type} on update ${ctx.update.update_id}`,
@@ -797,6 +952,11 @@ export async function handleCallbackQuery(
   // Execute validated action
   try {
     switch (action.type) {
+      case "broadcast": {
+        await handleBroadcastCallback(ctx, deps, action.raw);
+        break;
+      }
+
       case "status": {
         const text = statusMessage(config, status());
         if (ctx.callbackQuery?.message) {
@@ -874,21 +1034,25 @@ export function registerCallbackHandlers(
   bot: Bot | { on: (event: string, handler: (ctx: Context) => Promise<void>) => void },
   deps: BotDeps,
 ): void {
-  (bot as { on: (event: string, handler: (ctx: Context) => Promise<void>) => void }).on(
-    "callback_query",
-    async (ctx: Context) => {
-      await handleCallbackQuery(ctx, deps);
-    },
-  );
+  bot.on("callback_query", async (ctx: Context) => {
+    await handleCallbackQuery(ctx, deps);
+  });
 }
 
 export function createBot(deps: BotDeps): Bot {
+  const clientOptions =
+    deps.config.telegramApiRoot !== undefined && deps.config.telegramApiRoot !== null
+      ? { client: { apiRoot: deps.config.telegramApiRoot } }
+      : undefined;
   const bot = new Bot(
     deps.config.botToken,
-    deps.botInfo !== undefined ? { botInfo: deps.botInfo } : undefined,
+    deps.botInfo !== undefined
+      ? { botInfo: deps.botInfo, ...clientOptions }
+      : clientOptions,
   );
   registerCommandHandlers(bot, deps);
   registerCallbackHandlers(bot, deps);
+  registerBroadcastHandlers(bot, deps);
   const { config, status, logs } = deps;
 
   bot.command("export", async (ctx) => {
@@ -928,7 +1092,7 @@ export interface SendExtra {
    * Plain-text rendering of the same notification, sent without a `parse_mode`
    * when Telegram rejects the MarkdownV2 version for entity/parse reasons.
    * Optional: without it the notifier behaves exactly as before (parse errors
-   * propagate, no second send).
+   * propagate, no second send). Empty or whitespace-only values count as absent.
    */
   plainText?: string | undefined;
   /**
@@ -941,6 +1105,8 @@ export interface SendExtra {
    * absent, so the send is byte-identical to the unthreaded one.
    */
   replyToMessageId?: number | undefined;
+  /** Decoded contract event name used to apply silent-notification policy. */
+  eventName?: string | undefined;
 }
 
 /**
@@ -980,24 +1146,51 @@ function eventRefLabel(eventRef: SendExtra["eventRef"]): string {
 }
 
 /**
+ * Sends suppressed by the empty-message guard, counted so callers (and the
+ * empty-text tests) can prove a blank render never reached the Telegram API.
+ */
+export const notifierSkips = { emptyText: 0 };
+
+/**
  * The poller's send path: route each contract's messages to its named chat,
  * with the event's explorer button when `extra.reply_markup` is set.
  *
  * MarkdownV2 first; exactly one plain-text retry when Telegram rejects the
- * entities *and* the caller supplied `extra.plainText`. The retry carries no
- * `parse_mode`, so it cannot fail the same way. Every other failure —
+ * entities *and* the caller supplied a non-blank `extra.plainText`. The retry
+ * carries no `parse_mode`, so it cannot fail the same way. Every other failure —
  * network, rate limit, auth, unknown chats, or a failed plain-text retry —
  * propagates unchanged, preserving the poller's existing error/cursor
  * accounting. An oversized payload is split into chunks and an
  * unspecified one into a single call, so the MarkdownV2-to-plain-text
  * retry happens at most once per chunk, never in a loop.
+ *
+ * A rendering that is empty, whitespace-only, or not a string at all is
+ * skipped before any API call: Telegram rejects blank message text with a
+ * 400, and a formatters' `null` must never turn into a doomed send. The skip
+ * is counted in {@link notifierSkips} and logged with bounded metadata.
  */
 export function createNotifier(
   bot: Pick<Bot, "api">,
   config: Pick<BotConfig, "chatId" | "marketChatId" | "squadChatId" | "botToken"> &
-    Partial<Pick<BotConfig, "chatIds" | "linkPreviewMarket" | "linkPreviewSquad">>,
+    Partial<Pick<BotConfig, "chatIds" | "linkPreviewMarket" | "linkPreviewSquad" | "silentEvents">>,
 ) {
-  return async (text: string, source?: ContractSource, extra?: SendExtra): Promise<void> => {
+  return async (
+    text: string | null,
+    source?: ContractSource,
+    extra?: SendExtra,
+  ): Promise<void> => {
+    if (typeof text !== "string" || text.trim() === "") {
+      notifierSkips.emptyText += 1;
+      // Only bounded metadata: which chat path and how short the render was —
+      // never the payload itself.
+      console.warn(
+        `[notifier] skipped empty message${eventRefLabel(extra?.eventRef)} ` +
+          `(source=${typeof source === "string" && source ? source.slice(0, 32) : "default"}, ` +
+          `chars=${typeof text === "string" ? text.length : -1})`,
+      );
+      return;
+    }
+
     const defaultChat = config.chatId ?? config.chatIds?.[0] ?? "";
     const chatId = source === "market"
       ? config.marketChatId || defaultChat
@@ -1013,9 +1206,13 @@ export function createNotifier(
         ? !config.linkPreviewSquad
         : true;
 
+    const silentOption = extra?.eventName && isSilent(extra.eventName, config.silentEvents ?? DEFAULT_SILENT_EVENTS)
+      ? { disable_notification: true }
+      : {};
     const notificationOptions = {
       parse_mode: "MarkdownV2" as const,
       link_preview_options: { is_disabled: linkPreviewDisabled },
+      ...silentOption,
     };
 
     // Oversized payloads go out as ordered chunks under Telegram's limit. The
@@ -1047,8 +1244,10 @@ export function createNotifier(
       });
       return;
     } catch (err) {
+      // A blank fallback is no fallback: sending whitespace-only text would
+      // just draw the same 400, so the original parse error propagates.
       const fallback = extra?.plainText;
-      if (typeof fallback !== "string" || fallback === "" || !isMarkdownParseError(err)) {
+      if (typeof fallback !== "string" || fallback.trim() === "" || !isMarkdownParseError(err)) {
         throw err;
       }
       // Only bounded metadata is logged: the fallback outcome, the safe error
@@ -1064,6 +1263,7 @@ export function createNotifier(
       // Plain text (no parse mode), same per-source link preview setting.
       await bot.api.sendMessage(chatId, fallback, {
         link_preview_options: notificationOptions.link_preview_options,
+        ...silentOption,
         ...(extra?.reply_markup ? { reply_markup: extra.reply_markup } : {}),
         ...(extra?.replyToMessageId !== undefined
           ? { reply_parameters: { chat_id: chatId, message_id: extra.replyToMessageId } }
@@ -1082,6 +1282,3 @@ export async function registerCommands(bot: Bot, config?: BotConfig): Promise<vo
     console.warn(`[bot] setMyCommands failed: ${safeErrorMessage(err)}`);
   }
 }
-
-
-

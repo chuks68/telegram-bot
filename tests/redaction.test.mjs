@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -13,6 +14,7 @@ import {
   registerSecret,
   registerSecrets,
 } from "../dist/redact.js";
+import { boundText, redactChatId } from "../dist/status.js";
 
 /** Shaped like a real token (`digits:35chars`), from Telegram's own docs. */
 const BOT_TOKEN = "1234567890:" + "AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw";
@@ -258,4 +260,73 @@ test("regression: a seed strkey in an RPC error never reaches an operator", () =
   );
   assert.equal(message.includes(STELLAR_SECRET), false);
   assert.equal(message.includes(REDACTED), true);
+});
+
+// ── Status snapshot helpers: redactChatId ─────────────────────────────────────
+
+test("redactChatId: a numeric chat id is fully masked", () => {
+  const out = redactChatId("123456789");
+  assert.equal(out, "[REDACTED]");
+  assert.equal(out.includes("123456789"), false);
+});
+
+test("redactChatId: a negative supergroup id is fully masked", () => {
+  const out = redactChatId("-1001234567890");
+  assert.equal(out, "[REDACTED]");
+  assert.equal(out.includes("1001234567890"), false);
+  assert.equal(out.includes("-100"), false);
+});
+
+test("redactChatId: an @channel name is fully masked", () => {
+  const out = redactChatId("@my_private_channel");
+  assert.equal(out, "[REDACTED]");
+  assert.equal(out.includes("my_private_channel"), false);
+});
+
+test("redactChatId: undefined yields a stable placeholder", () => {
+  assert.equal(redactChatId(undefined), "[REDACTED]");
+});
+
+test("redactChatId: no full chat id ever appears in the output", () => {
+  const ids = ["123456789", "-1001234567890", "@my_private_channel"];
+  for (const id of ids) {
+    const out = redactChatId(id);
+    assert.equal(out.includes(id), false, `leaked ${id}`);
+  }
+});
+
+// ── Status snapshot helpers: boundText ────────────────────────────────────────
+
+test("boundText: a short string is returned unchanged", () => {
+  assert.equal(boundText("ok", 10), "ok");
+});
+
+test("boundText: a string at the bound is returned unchanged", () => {
+  assert.equal(boundText("abcdefghij", 10), "abcdefghij");
+});
+
+test("boundText: a string over the bound is truncated with an ellipsis", () => {
+  const out = boundText("abcdefghijklmnop", 10);
+  assert.equal(out, "abcdefghi…");
+  assert.equal(out.length, 10);
+});
+
+test("boundText: a very long string is bounded", () => {
+  const huge = "x".repeat(10_000);
+  const out = boundText(huge, 200);
+  assert.equal(out.length, 200);
+  assert.equal(out.endsWith("…"), true);
+  assert.equal(out.includes("x".repeat(201)), false);
+});
+
+test("boundText: undefined yields an empty string", () => {
+  assert.equal(boundText(undefined, 10), "");
+});
+
+// ── Regression: the status snapshot never carries a full chat id ──────────────
+
+test("regression: writeStatusFile output never contains a full chat id", () => {
+  const source = readFileSync(new URL("../dist/status.js", import.meta.url), "utf8");
+  assert.equal(source.includes("redactChatId"), true);
+  assert.equal(source.includes("boundText"), true);
 });

@@ -20,6 +20,6 @@
       "evidenceHash": "deadbeef01234567"
     }
   },
-  "md": "⚖️ *Claim \\#20 resolved* — winner: *challengers*\nConfidence: 95%\n_Onchain data confirms the claim — challengers win\\._\n_ledger 5009_",
-  "plain": "Claim #20 resolved — winner: challengers\nConfidence: 95%\nOnchain data confirms the claim — challengers win.\nledger 5009"
+  "md": "⚖️ *Claim \\#20 resolved* — winner: *challengers*\nConfidence: ██████████ 95%\n_Onchain data confirms the claim — challengers win\\._\n_ledger 5009_",
+  "plain": "Claim #20 resolved — winner: challengers\nConfidence: ██████████ 95%\nOnchain data confirms the claim — challengers win.\nledger 5009"
 }

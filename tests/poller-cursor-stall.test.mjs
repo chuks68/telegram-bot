@@ -37,7 +37,7 @@ function baseConfig(overrides = {}) {
     chatId: "-1001234567890",
     pollIntervalMs: 40,
     startLookbackLedgers: 60,
-    cursorFile: "./data/cursor.json",
+    cursorFile: "/tmp/unused-cursor.json",
     maxNotificationsPerCycle: 20,
     healthHost: "127.0.0.1",
     healthPort: 0,

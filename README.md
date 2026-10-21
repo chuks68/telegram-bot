@@ -89,6 +89,7 @@ deployments continue unchanged and the operator commands are ignored.
 ```bash
 cp .env.example .env     # then fill in BOT_TOKEN and TELEGRAM_CHAT_ID
 npm install
+npm run doctor           # verify environment and .env configuration
 npm run dev              # tsx, restarts on change
 ```
 
@@ -1012,6 +1013,10 @@ deadline.
 
 The process exposes a **loopback HTTP** probe for supervisors and deploy
 checks (default `http://127.0.0.1:8787`):
+
+Webhook deployments reuse this listener. See the
+[Telegram webhook mode runbook](docs/webhook-mode.md) for the exact route,
+proxy requirements, secret lifecycle, verification, and rollback steps.
 
 | Path | Meaning |
 | --- | --- |

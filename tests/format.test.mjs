@@ -4,6 +4,7 @@ import test from "node:test";
 import { createNotifier } from "../dist/bot.js";
 import { escapeMd, formatEvent, splitTelegramMessage, TELEGRAM_MAX_MESSAGE_LENGTH } from "../dist/notifications/format.js";
 import { formatUsdc } from "../dist/stellar/decode.js";
+import { marketEvent, squadEvent } from "./helpers/events.mjs";
 
 const reserved = "_*[]()~`>#+-=|{}.\\!";
 const reservedSet = new Set(Array.from(reserved));
@@ -49,20 +50,12 @@ test("formatted money notifications keep explicit decimals and escape the decima
     networkPassphrase: "Test SDF Network ; September 2015",
     explorerBaseUrl: "https://stellar.expert/explorer",
   };
-  const event = {
-    source: "market",
-    contractId: "market",
+  const event = marketEvent("claim_challenged", {
     ledger: 43,
-    txHash: "",
-    at: 0,
-    eventId: "43-0",
-    payload: {
-      name: "claim_challenged",
-      claimId: 7,
-      challenger: "GABCD",
-      stake: 20_000_000n,
-    },
-  };
+    claimId: 7,
+    challenger: "GABCD",
+    stake: 20_000_000n,
+  });
 
   const message = formatEvent(config, event);
   assert.match(message, /Stake: \*2\\.0000000 USDC\*/);
@@ -78,15 +71,11 @@ test("unknown or malformed decoded events stay non-notifying", () => {
     networkPassphrase: "Test SDF Network ; September 2015",
     explorerBaseUrl: "https://stellar.expert/explorer",
   };
-  const event = {
-    source: "market",
-    contractId: "market",
+  const event = marketEvent("unknown", {
     ledger: 44,
-    txHash: "",
-    at: 0,
-    eventId: "44-0",
-    payload: { name: "unknown", eventName: "claim_challenged", reason: "malformed amount" },
-  };
+    eventName: "claim_challenged",
+    reason: "malformed amount",
+  });
 
   assert.equal(formatEvent(config, event), null);
 });
@@ -120,23 +109,15 @@ test("formatted untrusted event text reaches Telegram as exact MarkdownV2", asyn
     networkPassphrase: "Test SDF Network ; September 2015",
     explorerBaseUrl: "https://stellar.expert/explorer",
   };
-  const event = {
-    source: "market",
-    contractId: "market",
+  const event = marketEvent("claim_created", {
     ledger: 42,
-    txHash: "",
-    at: 0,
-    eventId: "42-0",
-    payload: {
-      name: "claim_created",
-      claimId: 7,
-      creator: "GABCD",
-      category: reserved,
-    },
-  };
+    claimId: 7,
+    creator: "GABCD",
+    category: reserved,
+  });
   const message = formatEvent(config, event);
   const expectedMessage =
-    `🆕 *New claim* \\#7\nCategory: ${expectedEscape(reserved)}\n` +
+    `🆕 *New claim* \\#7\nCategory: 🏷️ ${expectedEscape(reserved)}\n` +
     "Creator: `GABCD`\n_ledger 42_";
   const sent = [];
   const fakeBot = {
@@ -173,19 +154,17 @@ test("oversized event fields are clipped safely before MarkdownV2 escaping", () 
     explorerBaseUrl: "https://stellar.expert/explorer",
   };
   const category = `${"a".repeat(199)}🛰️`;
-  const event = {
-    source: "market",
-    contractId: "market",
+  const event = marketEvent("claim_created", {
     ledger: 42,
     txHash: "x".repeat(129),
-    at: 0,
-    eventId: "42-0",
-    payload: { name: "claim_created", claimId: 7, creator: "GABCD", category },
-  };
+    claimId: 7,
+    creator: "GABCD",
+    category,
+  });
 
   const message = formatEvent(config, event);
   const expectedMessage =
-    `🆕 *New claim* \\#7\nCategory: ${"a".repeat(199)}…\n` +
+    `🆕 *New claim* \\#7\nCategory: 🏷️ ${"a".repeat(199)}…\n` +
     "Creator: `GABCD`\n_ledger 42_";
 
   assert.equal(message, expectedMessage);
@@ -202,22 +181,14 @@ test("oversized squad questions are clipped without splitting emoji", () => {
     networkPassphrase: "Test SDF Network ; September 2015",
     explorerBaseUrl: "https://stellar.expert/explorer",
   };
-  const event = {
-    source: "squad",
-    contractId: "squad",
+  const event = squadEvent("market_created", {
     ledger: 42,
-    txHash: "",
-    at: 0,
-    eventId: "42-0",
-    payload: {
-      name: "market_created",
-      marketId: 7,
-      captain: "GABCD",
-      deadline: 1_800_000_000,
-      feeBps: 25,
-      question: `${"q".repeat(199)}🛰️`,
-    },
-  };
+    marketId: 7,
+    captain: "GABCD",
+    deadline: 1_800_000_000,
+    feeBps: 25,
+    question: `${"q".repeat(199)}🛰️`,
+  });
 
   const message = formatEvent(config, event);
   assert.match(message, new RegExp(`\\n${"q".repeat(199)}…\\n`));
@@ -390,20 +361,13 @@ test("formatEvent prefixes message with [PREVIEW MODE] when channelPreviewMode i
     explorerBaseUrl: "https://stellar.expert/explorer",
     channelPreviewMode: true,
   };
-  const event = {
-    source: "market",
-    contractId: "market",
+  const event = marketEvent("claim_created", {
     ledger: 100,
     txHash: "hash123",
-    at: 0,
-    eventId: "100-0",
-    payload: {
-      name: "claim_created",
-      claimId: 5,
-      creator: "GABCD",
-      category: "sports",
-    },
-  };
+    claimId: 5,
+    creator: "GABCD",
+    category: "sports",
+  });
   const message = formatEvent(config, event);
   assert.match(message, /^🧪 \*\[PREVIEW MODE\]\*\n🆕 \*New claim\*/);
 });
@@ -419,15 +383,10 @@ test("formatFallbackEvent formats actionable degraded event notification with re
     networkPassphrase: "Test SDF Network ; September 2015",
     explorerBaseUrl: "https://stellar.expert/explorer",
   };
-  const event = {
-    source: "market",
-    contractId: "CDV6JXIJCALSXQELCS6YUEWJWG5DFXQK5PJ5I7MWI6KVMQJBC5DLPKZI",
+  const event = marketEvent("unknown", {
     ledger: 200,
     txHash: "hash456",
-    at: 0,
-    eventId: "200-0",
-    payload: { name: "unknown" },
-  };
+  });
   const fallback = formatFallbackEvent(config, event, "corrupt payload 123456789:SECRET-TOKEN-ABCD");
   assert.match(fallback, /⚠️ \*Event Notification Fallback\*/);
   assert.equal(fallback.includes("SECRET-TOKEN"), false);
@@ -443,22 +402,14 @@ test("clip: question field is bounded in market_created notification", () => {
     networkPassphrase: "Test SDF Network ; September 2015",
   };
   const longQuestion = "Will ".repeat(100); // 500 chars
-  const event = {
-    source: "squad",
-    contractId: "squad",
+  const event = squadEvent("market_created", {
     ledger: 51,
-    txHash: "",
-    at: 0,
-    eventId: "51-0",
-    payload: {
-      name: "market_created",
-      marketId: 1,
-      captain: "GABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDE",
-      deadline: 1_800_000_000,
-      feeBps: 100,
-      question: longQuestion,
-    },
-  };
+    marketId: 1,
+    captain: "GABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCDE",
+    deadline: 1_800_000_000,
+    feeBps: 100,
+    question: longQuestion,
+  });
   const message = formatEvent(config, event);
   assert.ok(message !== null, "Expected a non-null message");
   assert.ok(
@@ -477,22 +428,14 @@ test("clip: summary field is bounded in claim_resolved notification", () => {
     networkPassphrase: "Test SDF Network ; September 2015",
   };
   const longSummary = "evidence ".repeat(100); // 900 chars
-  const event = {
-    source: "market",
-    contractId: "market",
+  const event = marketEvent("claim_resolved", {
     ledger: 52,
-    txHash: "",
-    at: 0,
-    eventId: "52-0",
-    payload: {
-      name: "claim_resolved",
-      claimId: 3,
-      winnerSide: 2,
-      summary: longSummary,
-      confidence: 95,
-      evidenceHash: "abc123",
-    },
-  };
+    claimId: 3,
+    winnerSide: 2,
+    summary: longSummary,
+    confidence: 95,
+    evidenceHash: "abc123",
+  });
   const message = formatEvent(config, event);
   assert.ok(message !== null, "Expected a non-null message");
   // The raw summary should not appear verbatim past 200 chars in the output

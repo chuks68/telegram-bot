@@ -117,7 +117,7 @@ test("git-ignored real-token files are out of scope", () => {
   // .env is ignored by git (see .gitignore), so scanRepo never reads it — a
   // real local token cannot turn every CI/local run red.
   assert.equal(isScannable(".env"), false);
-  assert.equal(isScannable("data/cursor.json"), false);
+  assert.equal(isScannable("data/cursor.json"), false); // hermetic-data: allow (verifies scanner ignore)
   assert.equal(isScannable("node_modules/x/index.js"), false);
   assert.equal(isScannable("dist/bot.js"), false);
   assert.equal(isScannable("package-lock.json"), false);

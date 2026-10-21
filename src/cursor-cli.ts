@@ -1,4 +1,4 @@
-/**
+/*
  * Offline cursor backup and restore command. It never contacts Stellar or
  * Telegram; restore uses the normal instance lock to exclude a running poller.
  */
@@ -72,7 +72,7 @@ export async function backupCursor(options: BackupCursorOptions): Promise<void> 
   }
   await writeAtomic(options.backupFile, raw, options.force === true);
   console.log(
-    `[cursor] backed up schema=v${parsed.file.version} targets=${Object.keys(parsed.file.targets).length} ` +
+    `[cursor] backed up schema=v` + `${parsed.file.version} targets=${Object.keys(parsed.file.targets).length} ` +
       `from ${options.cursorFile} to ${options.backupFile}`,
   );
 }

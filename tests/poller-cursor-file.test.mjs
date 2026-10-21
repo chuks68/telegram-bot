@@ -21,7 +21,7 @@ function baseConfig(cursorFile) {
     squadContractId: "C" + "B".repeat(55),
     rpcUrl: "https://example.invalid/rpc",
     horizonUrl: "https://example.invalid/horizon",
-    networkPassphrase: "Test SDF Network ; September 2015",
+    networkPassphrase: "Test DF Network ; September 2015",
     explorerBaseUrl: "https://example.invalid/explorer",
     botToken: "123456789:TEST-ONLY-TOKEN-NEVER-USE",
     chatIds: ["-1001234567890"],
@@ -70,7 +70,8 @@ async function waitForCursorRewrite(cursorFile, originalUpdatedAt) {
 test("pause/resume is bounded during an in-flight scan and restart reloads version-1 cursors", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "mimir-resume-"));
   const cursorFile = path.join(directory, "cursor.json");
-  await writeFile(cursorFile, CURSOR_FILE, "utf8");
+  await writeFile(cursorFile, CURSOR_FILE,
+ "utf8");
 
   const first = createPoller({
     config: baseConfig(cursorFile),
@@ -97,7 +98,7 @@ test("pause/resume is bounded during an in-flight scan and restart reloads versi
     first.stop();
   }
 
-  const second = createPoller({
+  const second = createPoller( {
     config: baseConfig(cursorFile),
     server: stuckServer(),
     send: async () => undefined,

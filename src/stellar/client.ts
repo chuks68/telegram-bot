@@ -258,6 +258,10 @@ function truncatedContractId(contractId: string): string {
  * not a string, rather than letting it reach the RPC or corrupt the filter.
  * Used at the boundary where contract IDs enter RPC requests.
  *
+ * Covered by `tests/client-validation-fuzz.test.mjs`, which fuzzes this
+ * validator with a seeded generator to confirm every malformed input throws
+ * a {@link ContractIdError} (never an unexpected error type).
+ *
  * @param contractId - The contract ID to validate (typically from config)
  * @param field - Label used in error messages, e.g. "market contract ID"
  * @throws {ContractIdError} When the contract ID is invalid
@@ -302,6 +306,10 @@ function boundedLedgerValue(value: unknown): string {
  * Throws a bounded {@link LedgerWindowError} when the numbers are missing,
  * negative, non-integer, or inverted, rather than letting a nonsense range
  * reach the RPC.
+ *
+ * Covered by `tests/client-validation-fuzz.test.mjs`, which fuzzes this
+ * validator with a seeded generator (including negatives and `NaN`) to
+ * confirm every malformed window throws a {@link LedgerWindowError}.
  */
 export function validateLedgerWindow(health: {
   oldestLedger?: unknown;

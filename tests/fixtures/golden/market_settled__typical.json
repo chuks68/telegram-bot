@@ -20,6 +20,6 @@
       "dust": "0"
     }
   },
-  "md": "💰 *Claim \\#40 settled*\nPaid out: *18\\.0000000 USDC* · fees 2\\.0000000 USDC\nOwed to challengers: 16\\.0000000 USDC\n_ledger 5019_",
-  "plain": "Claim #40 settled\nPaid out: 18.0000000 USDC · fees 2.0000000 USDC\nOwed to challengers: 16.0000000 USDC\nledger 5019"
+  "md": "💰 *Claim \\#40 settled*\nPaid out: *18\\.0000000 USDC* · fees 2\\.0000000 USDC\nOwed to challengers: 16\\.0000000 USDC \\(88\\.89%\\)\nTotal fees: 2\\.0000000 USDC \\(11\\.11%\\)\nDust: 0\\.0000000 USDC \\(0\\.00%\\)\n_ledger 5019_",
+  "plain": "Claim #40 settled\nPaid out: 18.0000000 USDC · fees 2.0000000 USDC\nOwed to challengers: 16.0000000 USDC (88.89%)\nTotal fees: 2.0000000 USDC (11.11%)\nDust: 0.0000000 USDC (0.00%)\nledger 5019"
 }

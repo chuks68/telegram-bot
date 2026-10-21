@@ -65,6 +65,7 @@ import {
   type DecodedEvent,
 } from "./decode.js";
 import { formatRpcTiming, RpcTiming, type RpcTimingSummary } from "./metrics.js";
+import { formatScanJsonl } from "./scan-jsonl.js";
 
 /** Events per request. The RPC caps this; 200 is well inside it. */
 export const EVENT_PAGE_LIMIT = 200;
@@ -685,16 +686,18 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const asJson = hasFlag("json");
+  const asJsonl = hasFlag("jsonl");
+  const machineOutput = asJson || asJsonl;
 
   const probeTiming = new RpcTiming();
   const health = await probeTiming.measure("health", () => server.getHealth());
   const network = networkLabel(config);
 
-  // When `--json` is set, stdout is reserved for one JSON document. Progress
-  // goes to stderr so piping (`npm run scan -- --json | jq`) stays valid.
-  const progress = asJson ? console.error.bind(console) : console.log.bind(console);
+  // When `--json` or `--jsonl` is set, stdout is reserved for machine output.
+  // Progress goes to stderr so piping (`npm run scan -- --json | jq`) stays valid.
+  const progress = machineOutput ? console.error.bind(console) : console.log.bind(console);
 
-  if (!asJson) {
+  if (!machineOutput) {
     console.log(`RPC        ${config.rpcUrl} (${network})`);
     console.log(`ledgers    oldest=${health.oldestLedger} latest=${health.latestLedger}`);
     console.log(formatRpcTiming(probeTiming.summary()));
@@ -713,9 +716,10 @@ async function main(): Promise<void> {
     ? allTargets.filter((t) => t.source === (contractArg as ContractArg))
     : allTargets;
   const jsonTargets: ScanJsonTarget[] = [];
+  const jsonlEvents: DecodedEvent[] = [];
 
   for (const target of targets) {
-    if (!asJson) {
+    if (!machineOutput) {
       console.log(`\n=== ${target.source}  ${target.contractId} ===`);
     }
 
@@ -723,6 +727,14 @@ async function main(): Promise<void> {
       maxPages: pages,
       startLedger: from ? Number(from) : health.oldestLedger,
     });
+
+    if (asJsonl) {
+      jsonlEvents.push(...scan.events);
+      progress(
+        `scanned ${target.source}: events=${scan.events.length} pages=${scan.pages} truncated=${scan.truncated}`,
+      );
+      continue;
+    }
 
     if (asJson) {
       jsonTargets.push(buildScanJsonTarget(scan, show));
@@ -751,7 +763,9 @@ async function main(): Promise<void> {
     }
   }
 
-  if (asJson) {
+  if (asJsonl) {
+    process.stdout.write(formatScanJsonl(jsonlEvents));
+  } else if (asJson) {
     const report = buildScanJsonReport({
       network,
       rpcUrl: config.rpcUrl,

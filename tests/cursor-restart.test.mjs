@@ -95,7 +95,7 @@ test("ephemeral data dir is unique, outside the repo, and removed on cleanup", a
   try {
     assert.notEqual(a.root, b.root);
     assert.ok(a.root.startsWith(os.tmpdir()), "must live under the OS temp dir");
-    assert.ok(!path.resolve(a.root).startsWith(path.join(repoRoot, "data")), "must not be repo data/");
+    assert.ok(!path.resolve(a.root).startsWith(path.join(repoRoot, "data")), "must not be repo data/"); // hermetic-data: allow (verifies temp data dir is not in repo data/)
     await writeFile(a.file("cursor.json"), "{}", "utf8");
   } finally {
     await a.cleanup();

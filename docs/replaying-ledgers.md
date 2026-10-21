@@ -181,7 +181,7 @@ The replay engine applies identical decoding and deduplication rules as the live
 Soroban RPC nodes maintain a rolling window of history (typically ~120,960 ledgers, or approximately 7 days on Testnet).
 
 * **The Retained Floor:** `server.getHealth()` returns `oldestLedger`. Requesting a start ledger below `oldestLedger` is refused by the RPC.
-* **Automatic Clamping:** The replay engine clamps `--from` up to `oldestLedger` and emits a warning.
+* **Automatic Clamping (`clampStartLedger`):** The replay engine invokes `clampStartLedger` (`src/stellar/replay.ts`) to clamp `--from` up to `oldestLedger`, sets `startClamped: true` on the walk summary, and emits a boundary warning.
 * **When Missed Ledgers are Below the Floor:**
   If an outage lasted longer than the retention window:
   1. The replay CLI can only recover events from `oldestLedger` to the recovery point.
@@ -207,6 +207,11 @@ npm run mock:rpc
 npm run replay:mock -- --from 900 --to 1000
 ```
 *(Or pass `--mock` directly: `npm run replay -- --from 900 --to 1000 --mock`)*
+
+For machine-readable verification in monitoring or operational scripts, append `--json`:
+```bash
+npm run replay:mock -- --from 900 --to 1000 --json
+```
 
 ### Verify Output
 

@@ -20,6 +20,6 @@
       "evidenceHash": "aaaabbbb"
     }
   },
-  "md": "⚖️ *Claim \\#22 resolved* — winner: *draw*\nConfidence: 50%\n_Evidence equally supports both sides\\._\n_ledger 5011_",
-  "plain": "Claim #22 resolved — winner: draw\nConfidence: 50%\nEvidence equally supports both sides.\nledger 5011"
+  "md": "⚖️ *Claim \\#22 resolved* — winner: *draw*\nConfidence: █████░░░░░ 50%\n_Evidence equally supports both sides\\._\n_ledger 5011_",
+  "plain": "Claim #22 resolved — winner: draw\nConfidence: █████░░░░░ 50%\nEvidence equally supports both sides.\nledger 5011"
 }

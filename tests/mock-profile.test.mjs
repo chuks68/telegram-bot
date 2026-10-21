@@ -76,7 +76,7 @@ test("without a profile, defaults are exactly the pre-profile behaviour", () => 
       assert.equal(networkLabel(stellar), "testnet");
 
       const config = loadConfig();
-      assert.equal(config.cursorFile, path.resolve("./data/cursor.json"));
+      assert.equal(config.cursorFile, path.resolve("./data/cursor.json")); // hermetic-data: allow (verifies testnet default)
       assert.equal(config.botToken, "123456789:TEST-ONLY-TOKEN-NEVER-USE");
       assert.equal(config.marketContractId, "CDV6JXIJCALSXQELCS6YUEWJWG5DFXQK5PJ5I7MWI6KVMQJBC5DLPKZI");
     },
@@ -97,7 +97,7 @@ test("the mock profile fills unset values with loopback and isolated-cursor defa
     assert.match(config.marketContractId, /^C[A-Z2-7]{55}$/);
     assert.match(config.squadContractId, /^C[A-Z2-7]{55}$/);
     // The drill's cursor must never be the real bot's cursor file.
-    assert.equal(config.cursorFile, path.resolve("./data/cursor.mock.json"));
+    assert.equal(config.cursorFile, path.resolve("./data/cursor.mock.json")); // hermetic-data: allow (verifies mock default)
     assert.equal(config.networkPassphrase, MOCK_NETWORK_PASSPHRASE);
     assert.equal(networkLabel(config), "mock");
     // Placeholder, not credential-shaped, and never delivered anywhere.
@@ -113,14 +113,14 @@ test("explicit environment values win over mock profile defaults", () => {
     {
       MIMIR_PROFILE: "mock",
       STELLAR_RPC_URL: "https://example.invalid/custom-rpc",
-      CURSOR_FILE: "./data/cursor.explicit.json",
+      CURSOR_FILE: "./data/cursor.explicit.json", // hermetic-data: allow (verifies explicit override)
       BOT_TOKEN: "123456789:" + "TEST-ONLY-TOKEN-NEVER-USE",
       TELEGRAM_CHAT_ID: "-1001234567890",
     },
     () => {
       const config = loadConfig();
       assert.equal(config.rpcUrl, "https://example.invalid/custom-rpc");
-      assert.equal(config.cursorFile, path.resolve("./data/cursor.explicit.json"));
+      assert.equal(config.cursorFile, path.resolve("./data/cursor.explicit.json")); // hermetic-data: allow (verifies explicit override)
       assert.equal(config.botToken, "123456789:TEST-ONLY-TOKEN-NEVER-USE");
       // Values with no explicit override still come from the profile.
       assert.equal(config.marketContractId, MOCK_MARKET_CONTRACT_ID);

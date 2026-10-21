@@ -1,4 +1,4 @@
-/**
+/*
  * Notification feature flags.
  *
  * Coarse boolean gates for Telegram posts so operators can quiet the bot

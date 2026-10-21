@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -10,6 +12,8 @@ import { eventCursorLedger } from "../dist/stellar/events.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(here, "fixtures");
+const repoRoot = path.join(here, "..");
+const validatorPath = path.join(repoRoot, "scripts", "validate-fixtures.mjs");
 
 /** Money keys on decoded payloads that fixtures store as decimal strings. */
 const MONEY_KEYS = new Set([
@@ -26,6 +30,23 @@ const MONEY_KEYS = new Set([
   "poolA",
   "poolB",
 ]);
+
+function runValidator(cwd) {
+  return new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      [validatorPath],
+      { cwd },
+      (error, stdout, stderr) => {
+        resolve({
+          code: error ? (typeof error.code === "number" ? error.code : 1) : 0,
+          stdout: String(stdout ?? ""),
+          stderr: String(stderr ?? ""),
+        });
+      },
+    );
+  });
+}
 
 function hydratePayload(payload) {
   const out = { ...payload };
@@ -47,6 +68,14 @@ function hydrateEvent(raw) {
 async function loadCatalog() {
   const raw = await readFile(path.join(fixturesDir, "events.json"), "utf8");
   return JSON.parse(raw);
+}
+
+async function copyFixtures(dest) {
+  const files = ["events.json", "events.mjs"];
+  for (const name of files) {
+    const raw = await readFile(path.join(fixturesDir, name), "utf8");
+    await writeFile(path.join(dest, name), raw, "utf8");
+  }
 }
 
 // ── Catalog meta ──────────────────────────────────────────────────────────────
@@ -408,5 +437,39 @@ test("every known squad event type has at least one positive fixture", async () 
 
   for (const name of required) {
     assert.ok(positiveNames.has(name), `missing positive fixture for squad event: ${name}`);
+  }
+});
+
+// ── Fixture validation script ─────────────────────────────────────────────────
+
+test("validate-fixtures accepts the current fixtures", async () => {
+  const result = await runValidator(repoRoot);
+  assert.equal(
+    result.code,
+    0,
+    `validator failed on current fixtures:\n${result.stdout}${result.stderr}`,
+  );
+});
+
+test("validate-fixtures fails on a broken copy with a clear message", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "fixtures-broken-"));
+  try {
+    await copyFixtures(dir);
+    const catalogPath = path.join(dir, "events.json");
+    const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+
+    // Introduce a duplicate id and drop a required field on another case.
+    assert.ok(catalog.cases.length >= 2, "need at least two cases to break");
+    catalog.cases[1].id = catalog.cases[0].id;
+    delete catalog.cases[0].event.payload.name;
+    await writeFile(catalogPath, JSON.stringify(catalog, null, 2), "utf8");
+
+    const result = await runValidator(dir);
+    assert.notEqual(result.code, 0, "validator should exit non-zero on broken fixtures");
+    const output = `${result.stdout}${result.stderr}`;
+    assert.match(output, /duplicate/i, `expected duplicate id error, got: ${output}`);
+    assert.match(output, /name/i, `expected missing name error, got: ${output}`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

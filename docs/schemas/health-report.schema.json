@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Health report",
+  "description": "Body of GET /health and GET /healthz: the object buildHealthReport in src/health.ts returns, serialised with JSON.stringify. HTTP 200 when ok is true, 503 otherwise. Every object is closed (additionalProperties: false), so a field added to or renamed in the report must be changed here too; tests/health-schema.test.mjs fails until it is.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "status", "service", "version", "network", "uptimeMs", "checkedAt", "poller", "config"],
+  "properties": {
+    "ok": { "type": "boolean", "description": "True exactly when status is \"ok\"." },
+    "status": {
+      "enum": ["ok", "degraded", "stopped"],
+      "description": "\"ok\" while running, including an operator pause or a graceful drain; \"degraded\" when polls are stale, failing, or a cursor is stale or stalled; \"stopped\" when the poller is not running."
+    },
+    "service": { "enum": ["mimir-telegram-bot"] },
+    "version": { "type": "string", "description": "Semver from package.json, or \"unknown\"." },
+    "network": {
+      "type": "string",
+      "description": "The STELLAR_NETWORK name, or one inferred from the passphrase: testnet, public, futurenet, mock or custom."
+    },
+    "uptimeMs": { "type": "integer", "minimum": 0 },
+    "checkedAt": { "type": "string", "format": "date-time" },
+    "poller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "running",
+        "paused",
+        "stopping",
+        "channelPreviewMode",
+        "cycles",
+        "lastCorrelationId",
+        "lastPollAt",
+        "lastSuccessAt",
+        "latestLedger",
+        "oldestLedger",
+        "chainClockAt",
+        "chainClockSkewMs",
+        "notificationsSent",
+        "notificationsFailed",
+        "eventsSkipped",
+        "eventsDeduplicated",
+        "notificationsDropped",
+        "cursorRewinds",
+        "deadLetter",
+        "consecutiveFailures",
+        "suppressedLogs",
+        "lastError",
+        "restartGaps",
+        "lastRestartGap",
+        "pendingFlush",
+        "lastFlushAt",
+        "targets",
+        "persistentVolumeAvailable",
+        "persistentVolumeError"
+      ],
+      "properties": {
+        "running": { "type": "boolean" },
+        "paused": { "type": "boolean", "description": "Intentional operator pause: the process is ready but no new cycle starts." },
+        "stopping": { "type": "boolean", "description": "A graceful shutdown is draining: no new cycles, unsent messages are dropped." },
+        "channelPreviewMode": { "type": "boolean" },
+        "cycles": { "type": "integer", "minimum": 0 },
+        "lastCorrelationId": { "type": ["string", "null"], "description": "Correlation id of the most recently started poll cycle." },
+        "lastPollAt": { "type": ["string", "null"], "format": "date-time" },
+        "lastSuccessAt": { "type": ["string", "null"], "format": "date-time" },
+        "latestLedger": { "type": ["integer", "null"], "minimum": 0 },
+        "oldestLedger": { "type": ["integer", "null"], "minimum": 0 },
+        "chainClockAt": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Newest chain close time observed; null until one is seen."
+        },
+        "chainClockSkewMs": {
+          "type": ["integer", "null"],
+          "description": "checkedAt minus chainClockAt: positive while the local clock is ahead of the chain, negative when behind, null while chainClockAt is null."
+        },
+        "notificationsSent": { "type": "integer", "minimum": 0 },
+        "notificationsFailed": { "type": "integer", "minimum": 0 },
+        "eventsSkipped": { "type": "integer", "minimum": 0 },
+        "eventsDeduplicated": { "type": "integer", "minimum": 0, "description": "Events suppressed as already seen across overlapping pages and resumes." },
+        "notificationsDropped": { "type": "integer", "minimum": 0 },
+        "cursorRewinds": { "type": "integer", "minimum": 0, "description": "Cursors rewound to the RPC's retained floor this run." },
+        "deadLetter": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Sends that exhausted their retries and wait to be replayed. Counts only: no message text, no destination.",
+          "required": ["depth", "enqueued", "replayed", "dropped"],
+          "properties": {
+            "depth": { "type": "integer", "minimum": 0 },
+            "enqueued": { "type": "integer", "minimum": 0 },
+            "replayed": { "type": "integer", "minimum": 0 },
+            "dropped": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "consecutiveFailures": { "type": "integer", "minimum": 0 },
+        "suppressedLogs": { "type": "integer", "minimum": 0, "description": "Repeated error lines summarised instead of printed since start." },
+        "lastError": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["at", "message"],
+          "properties": {
+            "at": { "type": "string", "format": "date-time" },
+            "message": { "type": "string", "description": "Redacted error text." }
+          }
+        },
+        "restartGaps": { "type": "integer", "minimum": 0, "description": "Restart gaps detected since this process started." },
+        "lastRestartGap": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "description": "The most recent resume position that fell below the RPC's retained window. Ledger numbers only.",
+          "required": ["at", "source", "cursorLedger", "oldestLedger", "missedLedgers"],
+          "properties": {
+            "at": { "type": "string", "format": "date-time" },
+            "source": { "enum": ["market", "squad"] },
+            "cursorLedger": { "type": "integer", "minimum": 0 },
+            "oldestLedger": { "type": "integer", "minimum": 0 },
+            "missedLedgers": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "pendingFlush": { "type": "boolean", "description": "In-memory cursor state that is not on disk yet." },
+        "lastFlushAt": { "type": ["string", "null"], "format": "date-time" },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "version",
+              "contractId",
+              "lastCycleMs",
+              "maxCycleMs",
+              "lastEventLedger",
+              "cursorPreview",
+              "gapLedgers",
+              "cursorResetAt",
+              "cursorUnreadable",
+              "rewindFromLedger",
+              "cursorStale",
+              "cursorStalled",
+              "cyclesWithoutAdvance",
+              "hasError"
+            ],
+            "properties": {
+              "source": { "enum": ["market", "squad"] },
+              "version": { "type": "string", "description": "Contract version used to pick the decoder, e.g. v1 or v2." },
+              "contractId": { "type": "string", "description": "Public contract id (on chain)." },
+              "lastCycleMs": { "type": "integer", "minimum": 0, "description": "Duration of this target's most recent attempted cycle, in ms; 0 before the first one." },
+              "maxCycleMs": { "type": "integer", "minimum": 0, "description": "Longest attempted cycle for this target since process start, in ms." },
+              "lastEventLedger": { "type": ["integer", "null"], "minimum": 0 },
+              "cursorPreview": {
+                "type": ["string", "null"],
+                "description": "Opaque resume cursor, not a secret. Longer cursors are cut to 24 characters plus an ellipsis."
+              },
+              "gapLedgers": { "type": "integer", "minimum": 0, "description": "Ledgers lost to the retained window at this target's last restart gap." },
+              "cursorResetAt": { "type": ["string", "null"], "format": "date-time", "description": "When this target's stale cursor was last rewound." },
+              "cursorUnreadable": { "type": "boolean", "description": "A cursor is persisted but no ledger can be read out of it." },
+              "rewindFromLedger": { "type": ["integer", "null"], "minimum": 0, "description": "Ledger the target resumes from after a floor rewind." },
+              "cursorStale": { "type": "boolean", "description": "The RPC rejected this target's cursor as stale; true until a scan succeeds." },
+              "cursorStalled": { "type": "boolean", "description": "The cursor stayed unchanged for CURSOR_STALL_CYCLES cycles while behind the tip." },
+              "cyclesWithoutAdvance": { "type": "integer", "minimum": 0, "description": "Successful cycles with an unchanged cursor while behind the tip." },
+              "hasError": { "type": "boolean" }
+            }
+          }
+        },
+        "persistentVolumeAvailable": { "type": "boolean" },
+        "persistentVolumeError": { "type": ["string", "null"] }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Where configuration came from: setting names and sources, never a value.",
+      "required": ["profile", "envFile", "entries", "counts", "warnings"],
+      "properties": {
+        "profile": { "type": ["string", "null"], "description": "Active MIMIR_PROFILE, or null when unset." },
+        "envFile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["present", "suppliedKeys"],
+          "properties": {
+            "present": { "type": "boolean" },
+            "suppliedKeys": { "type": "integer", "minimum": 0, "description": "Known settings whose effective value the .env file supplied." }
+          }
+        },
+        "entries": {
+          "type": "array",
+          "description": "Every setting the bot reads, in a stable order.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "source", "secret"],
+            "properties": {
+              "key": { "type": "string", "description": "Variable name, e.g. BOT_TOKEN. A name is not a value." },
+              "source": { "enum": ["process-env", "env-file", "profile-default", "built-in-default", "derived", "unset"] },
+              "secret": { "type": "boolean" },
+              "derivedFrom": { "type": "string", "description": "Present only when source is derived: the setting this one inherited from." },
+              "emptyDeclaration": { "type": "boolean", "description": "Present (true) only when the variable is set but empty, so a fallback won." }
+            }
+          }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How many settings each source supplied.",
+          "required": ["process-env", "env-file", "profile-default", "built-in-default", "derived", "unset"],
+          "properties": {
+            "process-env": { "type": "integer", "minimum": 0 },
+            "env-file": { "type": "integer", "minimum": 0 },
+            "profile-default": { "type": "integer", "minimum": 0 },
+            "built-in-default": { "type": "integer", "minimum": 0 },
+            "derived": { "type": "integer", "minimum": 0 },
+            "unset": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Actionable, value-free notes for boot logs and health checks.",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -18,17 +18,23 @@
     "lockfile:reproduce": "node scripts/check-lockfile.mjs --reproduce",
     "test": "npm run build && node --test --test-timeout=120000 tests/*.test.mjs",
     "test:mock": "npm run build && node --test --test-timeout=120000 tests/mock-*.test.mjs",
+    "test:fast": "node --import ./scripts/tsx-dist-loader.mjs --test --test-timeout=120000 tests/*.test.mjs",
     "scan": "tsx src/stellar/events.ts",
     "scan:secrets": "node scripts/scan-secrets.mjs",
     "scan:mock": "tsx src/stellar/events.ts --mock",
     "mock:rpc": "tsx src/stellar/mock-rpc.ts",
+    "mock:telegram": "tsx src/dev/fake-telegram.ts",
     "mock:poll": "tsx src/mock-run.ts",
+    "mock:stack": "docker compose -f docker-compose.mock.yml up --build",
+    "mock:stack:down": "docker compose -f docker-compose.mock.yml down -v",
     "audit": "tsx src/audit-cli.ts",
     "audit:report": "tsx src/audit-cli.ts",
     "seed:cursor": "tsx src/dev/seedCursor.ts",
     "cursor": "node dist/cursor-cli.js",
     "replay": "tsx src/replay-cli.ts",
-    "replay:mock": "tsx src/replay-cli.ts --mock"
+    "replay:mock": "tsx src/replay-cli.ts --mock",
+    "decode": "tsx src/decode-cli.ts",
+    "doctor": "tsx src/doctor-cli.ts"
   },
   "c8": {
     "all": true,
@@ -38,7 +44,8 @@
     "exclude": [
       "src/index.ts",
       "src/stellar/events.ts",
-      "src/stellar/client.ts"
+      "src/stellar/client.ts",
+      "src/dev/fake-telegram.ts"
     ],
     "check-coverage": true,
     "lines": 80,

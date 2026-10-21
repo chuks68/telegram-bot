@@ -25,7 +25,8 @@
  * decoding and are only converted for display, at the formatting edge.
  */
 
-import { scValToNative, type rpc, type xdr } from "@stellar/stellar-sdk";
+import { recordDecodeOutcome } from "./decode-stats.js";
+import { scValToNative, type rpc, xdr } from "@stellar/stellar-sdk";
 import type { StellarConfig } from "../config.js";
 import { eventKey } from "../dedup.js";
 import { txExplorerUrl } from "./client.js";
@@ -1072,6 +1073,7 @@ export function decodeEvent(
   const meta: EventMeta = { ...safeMeta(source, event), version: normVersion };
 
   if (!event || !Array.isArray(event.topic)) {
+    recordDecodeOutcome(source, "", "malformed");
     return {
       ...meta,
       payload: { name: "unknown", eventName: "", reason: "missing or invalid topic array" },
@@ -1079,6 +1081,7 @@ export function decodeEvent(
   }
 
   if (event.topic.length === 0) {
+    recordDecodeOutcome(source, "", "malformed");
     return {
       ...meta,
       payload: { name: "unknown", eventName: "", reason: "empty topic array" },
@@ -1110,6 +1113,7 @@ export function decodeEvent(
     }
     if (eventName === "") {
       // Without a name no decoder can be chosen; say why instead of "no decoder".
+      recordDecodeOutcome(source, eventName, "malformed");
       return {
         ...meta,
         payload: { name: "unknown", eventName, reason: "topic[0] is not an event name string" },
@@ -1126,6 +1130,7 @@ export function decodeEvent(
       try {
         decodedValue = native(event.value);
       } catch (err) {
+        recordDecodeOutcome(source, eventName, "malformed");
         return {
           ...meta,
           payload: {
@@ -1149,9 +1154,14 @@ export function decodeEvent(
 
     const payload = decoder(eventName, topics, fields);
 
-    if (payload) return { ...meta, payload } as DecodedEvent;
+    if (payload) {
+      recordDecodeOutcome(source, eventName, isAdminPayload(payload) ? "admin" : "decoded");
+      return { ...meta, payload } as DecodedEvent;
+    }
+    recordDecodeOutcome(source, eventName, "unknown");
     return { ...meta, payload: { name: "unknown", eventName, reason: "no decoder" } };
   } catch (err) {
+    recordDecodeOutcome(source, eventName, "malformed");
     return {
       ...meta,
       payload: {
@@ -1332,28 +1342,49 @@ export function dedupeEvents<T extends EventMeta>(events: readonly T[]): T[] {
 const MAX_LOG_FIELD_CHARS = 240;
 const MAX_LOG_JSON_CHARS = 4_096;
 
+const ANSI_ESCAPE_PATTERN =
+  /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]/g;
+const CONTROL_OR_WHITESPACE_PATTERN = /[\x00-\x1f\x7f-\x9f\s]+/g;
+
+function cleanLogString(value: string): string {
+  const compact = value
+    .replace(ANSI_ESCAPE_PATTERN, "")
+    .replace(CONTROL_OR_WHITESPACE_PATTERN, " ")
+    .trim();
+  return compact.length <= MAX_LOG_FIELD_CHARS
+    ? compact
+    : `${compact.slice(0, MAX_LOG_FIELD_CHARS - 1)}…`;
+}
+
 /**
  * JSON-safe view of a payload for logs and the `scan` CLI.
  *
- * Bounded twice, because the failure modes differ: every string is collapsed to
- * a single line and capped, so one remote value cannot dominate a log line, and
- * the serialized document is capped as a whole, so a payload built from many
- * fields cannot either. `bigint` is stringified explicitly because
- * `JSON.stringify` throws on it.
+ * Bounded twice, because the failure modes differ: every string is stripped of
+ * ANSI/control sequences, collapsed to a single line and capped, so one remote
+ * value cannot dominate or corrupt a log line, and the serialized document is
+ * capped as a whole, so a payload built from many fields cannot either. Plain
+ * object keys are sorted for deterministic log output, and `bigint` is
+ * stringified and bounded explicitly because `JSON.stringify` throws on it.
  */
 export function summarizePayloadForLog(
   payload: unknown,
   maxChars = MAX_LOG_JSON_CHARS,
 ): string {
-  const json = JSON.stringify(payload, (_key, item) => {
-    if (typeof item === "bigint") return item.toString();
-    if (typeof item !== "string") return item;
-    const compact = item.replace(/\s+/g, " ").trim();
-    return compact.length <= MAX_LOG_FIELD_CHARS
-      ? compact
-      : `${compact.slice(0, MAX_LOG_FIELD_CHARS - 1)}…`;
-  });
-  return json.length <= maxChars ? json : `${json.slice(0, maxChars - 1)}…`;
+  const limit = Math.max(1, maxChars);
+  const json =
+    JSON.stringify(payload, (_key, item) => {
+      if (typeof item === "bigint") return cleanLogString(item.toString());
+      if (typeof item === "string") return cleanLogString(item);
+      if (isRecord(item)) {
+        const sorted: Record<string, unknown> = {};
+        for (const k of Object.keys(item).sort()) {
+          sorted[cleanLogString(k)] = item[k];
+        }
+        return sorted;
+      }
+      return item;
+    }) ?? "null";
+  return json.length <= limit ? json : `${json.slice(0, limit - 1)}…`;
 }
 
 /**
@@ -1478,4 +1509,111 @@ export function toAdminAuditRecord(
     details,
     explorerUrl,
   };
+}
+
+// ── CLI support (issue: offline XDR decode) ─────────────────────────────────
+
+/**
+ * Minimal raw event shape accepted by the offline decode CLI.
+ *
+ * Mirrors the subset of `rpc.Api.EventResponse` the decoder actually reads, so
+ * a contributor can paste a base64 topic/value pair from an explorer or RPC log
+ * without fabricating the rest of the RPC envelope.
+ */
+export interface RawEventInput {
+  /** Base64-encoded `ScVal` topics, in order. `topic[0]` is the event name. */
+  topic: string[];
+  /** Base64-encoded `ScVal` value. */
+  value?: string;
+  /** Optional contract id, carried through to the decoded metadata. */
+  contractId?: string;
+  /** Optional ledger sequence. */
+  ledger?: number | string;
+  /** Optional transaction hash. */
+  txHash?: string;
+  /** Optional ledger close time (ISO string). */
+  ledgerClosedAt?: string;
+  /** Optional RPC event id / paging token. */
+  id?: string;
+}
+
+/** Raised when a raw event cannot be turned into an `rpc.Api.EventResponse`. */
+export class RawEventError extends Error {}
+
+function decodeBase64ScVal(b64: unknown, what: string): xdr.ScVal {
+  if (typeof b64 !== "string" || b64.trim() === "") {
+    throw new RawEventError(`${what}: expected a non-empty base64 string`);
+  }
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(b64.trim(), "base64");
+  } catch {
+    throw new RawEventError(`${what}: invalid base64`);
+  }
+  // `Buffer.from` is lenient; reject anything that does not round-trip.
+  if (bytes.length === 0 || bytes.toString("base64").replace(/=+$/, "") !== b64.trim().replace(/=+$/, "")) {
+    throw new RawEventError(`${what}: invalid base64`);
+  }
+  try {
+    return xdr.ScVal.fromXDR(bytes);
+  } catch (err) {
+    throw new RawEventError(
+      diagnostic(`${what}: malformed XDR: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  }
+}
+
+/**
+ * Build a minimal `rpc.Api.EventResponse` from a raw base64 topic/value pair.
+ *
+ * Throws {@link RawEventError} (bounded message) when base64 or XDR is
+ * malformed, so the CLI can exit with code 2 without leaking unbounded input.
+ */
+export function buildRawEvent(input: RawEventInput): rpc.Api.EventResponse {
+  if (!input || typeof input !== "object") {
+    throw new RawEventError("event: expected an object");
+  }
+  if (!Array.isArray(input.topic) || input.topic.length === 0) {
+    throw new RawEventError("event.topic: expected a non-empty array of base64 strings");
+  }
+  const topic = input.topic.map((t, i) => decodeBase64ScVal(t, `event.topic[${i}]`));
+  const value =
+    input.value === undefined || input.value === null
+      ? undefined
+      : decodeBase64ScVal(input.value, "event.value");
+
+  return {
+    type: "contract",
+    topic,
+    value,
+    contractId: input.contractId,
+    ledger: input.ledger,
+    txHash: input.txHash,
+    ledgerClosedAt: input.ledgerClosedAt,
+    id: input.id,
+  } as unknown as rpc.Api.EventResponse;
+}
+
+/**
+ * JSON replacer for `JSON.stringify` that keeps `bigint` values pipeable to
+ * `jq` (which has no bigint type) while leaving every other field intact.
+ */
+export function scanJsonReplacer(_key: string, value: unknown): unknown {
+  return typeof value === "bigint" ? value.toString() : value;
+}
+
+/**
+ * Decode a raw base64 event and return a JSON-ready object.
+ *
+ * Combines {@link buildRawEvent} and {@link decodeEvent}, and — when the
+ * decoder falls back to `unknown` — attaches the bounded reason so a CLI user
+ * can see why. Throws {@link RawEventError} on malformed input.
+ */
+export function decodeRawEvent(
+  source: ContractSource,
+  input: RawEventInput,
+  version: string = DEFAULT_CONTRACT_VERSION,
+): DecodedEvent {
+  const event = buildRawEvent(input);
+  return decodeEvent(source, event, version);
 }

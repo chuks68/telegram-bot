@@ -20,6 +20,6 @@
       "question": "Zero fee market"
     }
   },
-  "md": "🆕 *New squad market* \\#3\nZero fee market\nCaptain: `GABCD…TUVW` · fee 0 bps · deadline 2001\\-09\\-09T01:46:40\\.000Z\n_ledger 5038_",
-  "plain": "New squad market #3\nZero fee market\nCaptain: GABCD…TUVW · fee 0 bps · deadline 2001-09-09T01:46:40.000Z\nledger 5038"
+  "md": "🆕 *New squad market* \\#3\nZero fee market\nCaptain: `GABCD…TUVW` · fee 0 bps · deadline ended 8379d 16h ago \\(2001\\-09\\-09T01:46:40\\.000Z\\)\n_ledger 5038_",
+  "plain": "New squad market #3\nZero fee market\nCaptain: GABCD…TUVW · fee 0 bps · deadline ended 8379d 16h ago (2001-09-09T01:46:40.000Z)\nledger 5038"
 }

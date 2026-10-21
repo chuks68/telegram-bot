@@ -51,7 +51,7 @@ function makeConfig(allowedChatIds = []) {
     allowedChatIds,
     pollIntervalMs: 30_000,
     startLookbackLedgers: 60,
-    cursorFile: "./data/cursor.json",
+    cursorFile: "/tmp/unused-cursor.json",
     maxNotificationsPerCycle: 20,
     marketContractId: VALID_CONTRACT_MARKET,
     squadContractId: VALID_CONTRACT_SQUAD,

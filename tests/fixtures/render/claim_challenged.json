@@ -1,0 +1,19 @@
+{
+  "source": "market",
+  "contractId": "CDV6JXIJCALSXQELCS6YUEWJWG5DFXQK5PJ5I7MWI6KVMQJBC5DLPKZI",
+  "version": "v1",
+  "ledger": 4226692,
+  "txHash": "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+  "at": 1724000000,
+  "eventId": "4226692-0",
+  "eventType": "contract",
+  "transactionIndex": 1,
+  "operationIndex": 0,
+  "inSuccessfulContractCall": true,
+  "payload": {
+    "name": "claim_challenged",
+    "claimId": 7,
+    "challenger": "GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW",
+    "stake": "20000000"
+  }
+}

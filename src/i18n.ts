@@ -61,11 +61,13 @@ export const AUDIT_CLI_HINT =
 export const COMMAND_DESCRIPTIONS = {
   start: "What this bot does",
   help: "Show help",
+  about: "About this bot",
   status: "Last-seen ledger and watched contracts",
   audit: "Operator only: audit report (redacted, bounded)",
   contracts: "Contract ids and explorer links",
   health: "Health assessment and operational readiness",
   preview: "Preview channel notification formatting",
+  ping: "Measure Telegram round-trip latency",
   pause: "Operator only: pause new scans",
   resume: "Operator only: resume polling now",
 } as const;
@@ -92,7 +94,7 @@ export const NOTIFICATION_MD = {
   ): string =>
     (
       `⚖️ *Claim \\#${claimId} resolved* — winner: *${winnerSide}*\n` +
-      `Confidence: ${confidence}%\n` +
+      `Confidence: ${confidence}\n` +
       (summary ? `_${summary}_` : "")
     ).trimEnd(),
 
@@ -104,8 +106,19 @@ export const NOTIFICATION_MD = {
     totalPaid: string,
     totalFees: string,
     owedToChallengers: string,
-  ): string =>
-    `💰 *Claim \\#${claimId} settled*\nPaid out: *${totalPaid}* · fees ${totalFees}\nOwed to challengers: ${owedToChallengers}`,
+    ...rest: (readonly string[] | string | undefined)[]
+  ): string => {
+    const lines = rest[0];
+    const linesPart = Array.isArray(lines)
+      ? `\n${lines.join("\n")}`
+      : typeof lines === "string" && lines.length > 0
+        ? `\n${lines}`
+        : "";
+    if (linesPart) {
+      return `💰 *Claim \\#${claimId} settled*\nPaid out: *${totalPaid}* · fees ${totalFees}${linesPart}`;
+    }
+    return `💰 *Claim \\#${claimId} settled*\nPaid out: *${totalPaid}* · fees ${totalFees}\nOwed to challengers: ${owedToChallengers}`;
+  },
 
   challengerPaid: (
     claimId: string,
@@ -133,8 +146,12 @@ export const NOTIFICATION_MD = {
     captain: string,
     feeBps: string,
     deadline: string,
+    category?: string | null,
   ): string =>
-    `🆕 *New squad market* \\#${marketId}\n${question}\nCaptain: ${captain} · fee ${feeBps} bps · deadline ${deadline}`,
+    (
+      `🆕 *New squad market* \\#${marketId}\n${question}\nCaptain: ${captain} · fee ${feeBps} bps · deadline ${deadline}` +
+      (category ? `\nCategory: ${category}` : "")
+    ),
 
   deposited: (marketId: string, amount: string, side: string, participant: string): string =>
     `➕ *Squad \\#${marketId}* — ${amount} on *${side}*\nParticipant: ${participant}`,
@@ -200,7 +217,7 @@ export const NOTIFICATION_PLAIN = {
     confidence: string,
     summary: string | null,
   ): string =>
-    `Claim #${claimId} resolved — winner: ${winnerSide}\nConfidence: ${confidence}%` +
+    `Claim #${claimId} resolved — winner: ${winnerSide}\nConfidence: ${confidence}` +
     (summary ? `\n${summary}` : ""),
 
   claimCancelled: (claimId: string | number): string =>
@@ -211,8 +228,19 @@ export const NOTIFICATION_PLAIN = {
     totalPaid: string,
     totalFees: string,
     owedToChallengers: string,
-  ): string =>
-    `Claim #${claimId} settled\nPaid out: ${totalPaid} · fees ${totalFees}\nOwed to challengers: ${owedToChallengers}`,
+    ...rest: (readonly string[] | string | undefined)[]
+  ): string => {
+    const lines = rest[0];
+    const linesPart = Array.isArray(lines)
+      ? `\n${lines.join("\n")}`
+      : typeof lines === "string" && lines.length > 0
+        ? `\n${lines}`
+        : "";
+    if (linesPart) {
+      return `Claim #${claimId} settled\nPaid out: ${totalPaid} · fees ${totalFees}${linesPart}`;
+    }
+    return `Claim #${claimId} settled\nPaid out: ${totalPaid} · fees ${totalFees}\nOwed to challengers: ${owedToChallengers}`;
+  },
 
   challengerPaid: (
     claimId: string | number,
@@ -240,8 +268,12 @@ export const NOTIFICATION_PLAIN = {
     captain: string,
     feeBps: string,
     deadline: string,
+    category?: string | null,
   ): string =>
-    `New squad market #${marketId}\n${question}\nCaptain: ${captain} · fee ${feeBps} bps · deadline ${deadline}`,
+    (
+      `New squad market #${marketId}\n${question}\nCaptain: ${captain} · fee ${feeBps} bps · deadline ${deadline}` +
+      (category ? `\nCategory: ${category}` : "")
+    ),
 
   deposited: (
     marketId: string | number,
@@ -293,3 +325,9 @@ export const NOTIFICATION_PLAIN = {
 
 /** Text shown on the Telegram inline keyboard button for explorer links. */
 export const EXPLORER_BUTTON_TEXT = "View on Explorer";
+
+/**
+ * Text shown on the Telegram inline keyboard button that opens the Mimir web
+ * app (see `MIMIR_APP_URL`). Absent from a keyboard when no URL is configured.
+ */
+export const MIMIR_APP_BUTTON_TEXT = "Open in Mimir";

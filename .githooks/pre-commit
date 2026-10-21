@@ -1,0 +1,5 @@
+#!/bin/sh
+# Opt-in git pre-commit hook: scan staged files for secrets before committing.
+# Enable with: git config core.hooksPath .githooks
+
+node scripts/pre-commit.mjs

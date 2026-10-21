@@ -1,0 +1,71 @@
+# Example Prometheus alerting rules for the Mimir Telegram notifier.
+#
+# These rules evaluate metrics exposed by GET /metrics on the health server
+# (buildMetricsReport in src/health.ts).
+#
+# Validate locally with:
+#   promtool check rules deploy/prometheus/alerts.yml
+
+groups:
+  - name: mimir-telegram-bot
+    interval: 30s
+    rules:
+      - alert: MimirTelegramBotProcessDown
+        expr: mimir_telegram_poller_running == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: mimir-telegram-bot
+        annotations:
+          summary: "Mimir Telegram bot poller is stopped or paused"
+          description: >-
+            The poller for {{ $labels.network }} has reported
+            mimir_telegram_poller_running == 0 for more than 2 minutes. Verify
+            whether the process is down or intentionally paused via /pause.
+
+      - alert: MimirTelegramBotRpcFailureStreak
+        expr: mimir_telegram_consecutive_failures >= 5
+        for: 2m
+        labels:
+          severity: warning
+          service: mimir-telegram-bot
+        annotations:
+          summary: "Mimir Telegram bot experiencing consecutive Soroban RPC failures"
+          description: >-
+            The poller on {{ $labels.network }} has failed {{ $value }}
+            consecutive poll cycles (mimir_telegram_consecutive_failures >= 5).
+            Cursors remain intact and will retry on the next cycle; check
+            STELLAR_RPC_URL reachability and rate limits.
+
+      - alert: MimirTelegramBotRepeatedSendFailures
+        expr: increase(mimir_telegram_notifications_failed_total[15m]) >= 3
+        for: 0m
+        labels:
+          severity: warning
+          service: mimir-telegram-bot
+        annotations:
+          summary: "Mimir Telegram bot failing to deliver Telegram notifications"
+          description: >-
+            Telegram notification failures on {{ $labels.network }} increased by
+            {{ $value }} over the last 15 minutes
+            (mimir_telegram_notifications_failed_total). Check BOT_TOKEN,
+            TELEGRAM_CHAT_ID permissions, and dead-letter queue status.
+
+      - alert: MimirTelegramBotStaleCursor
+        expr: >-
+          (
+            mimir_telegram_latest_ledger
+            - on(network) group_left(source, contract) mimir_telegram_target_last_event_ledger
+          ) > 100000
+        for: 10m
+        labels:
+          severity: warning
+          service: mimir-telegram-bot
+        annotations:
+          summary: "Mimir Telegram bot target event ledger is approaching the RPC retention floor"
+          description: >-
+            Target {{ $labels.source }} ({{ $labels.contract }}) on
+            {{ $labels.network }} last processed an event {{ $value }} ledgers
+            behind mimir_telegram_latest_ledger, approaching the ~120,960-ledger
+            Soroban RPC retention window. Confirm that the poller is advancing
+            and not approaching a stale-cursor gap.

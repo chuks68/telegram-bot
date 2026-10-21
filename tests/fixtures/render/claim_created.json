@@ -1,0 +1,19 @@
+{
+  "source": "market",
+  "contractId": "CDV6JXIJCALSXQELCS6YUEWJWG5DFXQK5PJ5I7MWI6KVMQJBC5DLPKZI",
+  "version": "v1",
+  "ledger": 4226691,
+  "txHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "at": 1724000001,
+  "eventId": "4226691-0",
+  "eventType": "contract",
+  "transactionIndex": 0,
+  "operationIndex": 0,
+  "inSuccessfulContractCall": true,
+  "payload": {
+    "name": "claim_created",
+    "claimId": 7,
+    "creator": "GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW",
+    "category": "crypto"
+  }
+}

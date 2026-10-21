@@ -1,0 +1,50 @@
+version: "3.9"
+
+# Local mock stack for demo purposes.
+# Usage: docker compose -f docker-compose.mock.yml up
+
+# The mock RPC and the bot share the same non-root UID/GID as the
+# production Dockerfile so the named volume for data/ is writable.
+services:
+  mock-rpc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mimir-mock-rpc:local
+    environment:
+      MIMIR_PROFILE: mock
+      NODE_ENV: development
+    command: ["npm", "run", "mock:rpc"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - mock-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mimir-bot:local
+    environment:
+      MIMIR_PROFILE: mock
+      NODE_ENV: development
+      STELLAR_RPC_URL: http://mock-rpc:8000
+      TELEGRAM_MODE: fake
+      DRI_RUN: "true"
+    command: ["npm", "run", "mock:poll"]
+    depends_on:
+      mock-rpc:
+        condition: service_healthy
+    volumes:
+      - mock-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  mock-data:

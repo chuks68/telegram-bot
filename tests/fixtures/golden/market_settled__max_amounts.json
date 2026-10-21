@@ -20,6 +20,6 @@
       "dust": "7"
     }
   },
-  "md": "💰 *Claim \\#43 settled*\nPaid out: *999999\\.9999999 USDC* · fees 99999\\.9999999 USDC\nOwed to challengers: 900000\\.0000000 USDC\n_ledger 5022_",
-  "plain": "Claim #43 settled\nPaid out: 999999.9999999 USDC · fees 99999.9999999 USDC\nOwed to challengers: 900000.0000000 USDC\nledger 5022"
+  "md": "💰 *Claim \\#43 settled*\nPaid out: *999999\\.9999999 USDC* · fees 99999\\.9999999 USDC\nOwed to challengers: 900000\\.0000000 USDC \\(90\\.00%\\)\nTotal fees: 99999\\.9999999 USDC \\(10\\.00%\\)\nDust: 0\\.0000007 USDC \\(0\\.00%\\)\n_ledger 5022_",
+  "plain": "Claim #43 settled\nPaid out: 999999.9999999 USDC · fees 99999.9999999 USDC\nOwed to challengers: 900000.0000000 USDC (90.00%)\nTotal fees: 99999.9999999 USDC (10.00%)\nDust: 0.0000007 USDC (0.00%)\nledger 5022"
 }

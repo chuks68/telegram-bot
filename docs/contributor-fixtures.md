@@ -22,7 +22,7 @@ suites: `npm run test:mock`.
 CI runs typecheck, build, and the full test suite on every push and pull request.
 No live Testnet RPC access, Telegram credentials, or signing keys are required.
 
-Live Testnet scanning is **manual and separate**:
+Live Testnet scanning is **and separate**:
 
 ```bash
 npm run scan -- --pages 5 --show 5
@@ -35,6 +35,7 @@ Do not wire `npm run scan` into automated tests.
 | Path | Purpose |
 | --- | --- |
 | `tests/fixtures/events.json` | Decoded event cases for `formatEvent` / notifier fakes |
+| `tests/fixtures/events.mmj` | ESM module exporting the same event catalog for test imports |
 | `tests/fixtures/cursor-valid.json` | Well-formed `data/cursor.json` shape for restart docs |
 | `tests/fixtures/cursor-stale.json` | Cursor that fell below the RPC's retained window (restart gap) |
 | `tests/fixtures/cursor-corrupt.txt` | Unreadable cursor sample (cold-start path) |
@@ -52,6 +53,7 @@ Do not wire `npm run scan` into automated tests.
 | `tests/mock-rpc.test.mjs` | Live mock RPC: scanner walks, poller failure drills, cursor safety, log bounds |
 | `tests/mock-profile.test.mjs` | `MIMIR_PROFILE=mock` defaults, explicit-env precedence, unknown-profile failure |
 | `tests/config.test.mjs` | Env loading and validation, including the `SHUTDOWN_TIMEOUT_MS` drain budget |
+| `tests/validate-fixtures.test.mjs` | Runs `scripts/validate-fixtures.mjs` against good and deliberately broken temp copies |
 
 ## Event fixture schema
 
@@ -61,8 +63,8 @@ Do not wire `npm run scan` into automated tests.
 {
   "config": {
     "chatId": "-1001234567890",
-    "marketContractId": "CFIXTUREMARKET00000000000000000000000000000000000000000",
-    "squadContractId": "CFIXTURESQUAD0000000000000000000000000000000000000000000",
+    "marketContractId": "CFIXTUREMARKET0000000000000000000000000000000000000000000000",
+    "squadContractId": "CFIXTURESQUAD000000000000000000000000000000000000000000000000",
     "rpcUrl": "https://example.invalid/rpc",
     "horizonUrl": "https://example.invalid/horizon",
     "networkPassphrase": "Test SDF Network ; September 2015"
@@ -85,7 +87,7 @@ Rules:
    for large `i128` values. The fixture loader converts known money keys to
    `bigint` before calling `formatEvent`.
 2. **Contract ids, addresses, tx hashes, and cursors are stable fakes.** Prefer
-   `CFIXTURE…` / `GFIXTURE…` prefixes so grepping the suite never looks like
+   `CFIXTURE`… / `GFIXTURE…` prefixes so grepping the suite never looks like
    production secrets.
 3. **RPC / Horizon URLs must be non-routable** (`example.invalid`) so a buggy
    test cannot accidentally hit Testnet.
@@ -108,14 +110,39 @@ Rules:
 `expect: "skip"` requires `null` (or an `unknown` payload that the poller would
 log and not post).
 
+## Validating fixtures
+
+Before pushing, run the fixture validator to catch malformed or inconsistent
+entries before they break unrelated tests:
+
+```bash
+npm run validate:fixtures
+```
+
+The script (`scripts/validate-fixtures.mjs`) checks `tests/fixtures/events.json`
+and `tests/fixtures/events.mmj` for:
+
+- required config and case fields (`id`, `kind`, `expect`, `event`),
+- unique case `id` values,
+- monotonic `ledger` values per contract, and
+- known event names (as decoded by `src/stellar/decode.ts`).
+
+Each problem is printed as a one-line message; the script exits non-zero if any
+are found. To validate a copy in another directory (for example a deliberately
+broken fixture in a temp dir), pass the fixture directory as the first argument:
+
+```bash
+node scripts/validate-fixtures.mjs /path/to/fixtures
+```
+
 ## Cursor fixtures and restart safety
 
-- **Valid cursor** (`cursor-valid.json`): version `1`, per-target opaque
+- `cursor-valid.json`: version `1`, per-target opaque
   `cursor` string + `lastEventLedger`. Matches what the poller write-then-renames
   under `CURSOR_FILE` (default `./data/cursor.json`). New files also carry an
   additive, bounded `recentEventIds` dedup window; a file without it is still
   valid and loads with an empty window. Entries are opaque key strings: raw
-  RPC paging tokens, `v2:` content-derived composites, or keys written by
+RPC paging tokens, `v2:` content-derived composites, or keys written by
   older releases — all round-trip unchanged.
 - **Corrupt cursor** (`cursor-corrupt.txt`): not JSON. The poller must treat this
   as a **cold start**, not a crash — leave the in-memory cursor null and begin
@@ -134,8 +161,8 @@ test("resumes", () =>
   })); // directory is removed even if an assertion throws
 ```
 
-- `createTempDataDir(prefix)` returns `{ root, file(name), cleanup() }`; for a
-  whole file, create one at module level and call `test.after(() => dir.cleanup())`.
+- `createTempDataDir(prefix)` returns `{ root, file(name), cleanup() }`; for
+  a whole file, create one at module level and call `test.after(() => dir.cleanup())`.
 - Never point tests at the repo `data/` directory or at fixed `/tmp/...` names:
   they collide across runs and leak state into later ones.
 - Let a poller finish its cycle (wait for its cursor save) before cleanup, or a
@@ -149,7 +176,7 @@ test("resumes", () =>
 | RPC error for one contract | **unchanged** for that target | none that cycle | Fake rejected `readContractEvents`; assert cursor string identical |
 | Ledger-window violation (start ledger or cursor **above** the tip) | **unchanged** | none that cycle | Fake `getHealth` window plus an out-of-window value; assert a bounded `LedgerWindowError` and that no `getEvents` request is sent |
 | Cursor **below** the retained floor (stale) | **unchanged** | none that cycle | Fake `getHealth` window plus a stale cursor; assert the cursor is forwarded and the RPC's bounded stale rejection is surfaced |
-| Cursor below the floor, RPC answers with an **empty page** (no error) | **rewound** to the floor | retained window delivered late | Fake `getHealth` window plus a cursor walk that hands back the same cursor; assert one restart gap is recorded and the walk resumes at the floor |
+| Cursor below the floor, RPC answers with an **empty page** (no error) | **rewounded** to the floor | retained window delivered late | Fake `getHealth` window plus a cursor walk that hands back the same cursor; assert one restart gap is recorded and the walk resumes at the floor |
 | Cursor string with no readable ledger | **unchanged**, flagged `cursorUnreadable` | none that cycle | Pass a non-TOID cursor; assert no gap is recorded and the token is forwarded |
 | Telegram send error | **commits after partial delivery** | counted as failed | Fake `sendMessage` reject; assert cursor advances and no token appears in the Error message |
 | Corrupt cursor file | cold start | n/a | Use `cursor-corrupt.txt` contents |
@@ -165,6 +192,9 @@ test("resumes", () =>
 | Restart with a saved window | resumed | boundary event suppressed | Point two pollers at one temp `CURSOR_FILE` |
 
 ## Failure drills against the local mock
+
+See [Mock RPC scenarios](mock-rpc.md) for the exact scenario fields, value
+encodings, failure budgets, and CLI precedence.
 
 The table above is enforced against fakes in unit tests **and** against a real
 HTTP server: `src/stellar/mock-rpc.ts` implements the Soroban JSON-RPC surface
@@ -190,29 +220,12 @@ without replay, bounded redacted logs, and the version-1 cursor file shape.
 
 1. Pick the contract event from `src/stellar/decode.ts` (topic order + value map).
 2. Append a case to `tests/fixtures/events.json` with a unique `id`.
-3. Run `npm test` and extend assertions in `tests/fixtures.test.mjs` only if the
+3. Run `npm run validate:fixtures` to confirm the catalog is well-formed.
+4. Run `npm test` and extend assertions in `tests/fixtures.test.mjs`` only if the
    catalog runner needs a new expect mode.
-4. If behaviour changes ops (env vars, cursor shape), update this guide and the
+5. If behaviour changes ops (env vars, cursor shape), update this guide and the
    README "Development checks" link in the same PR.
 
 ## Log capture and the `/export` command
 
-The bot keeps a bounded in-memory ring of its own redacted console lines
-(`LOG_BUFFER_LINES`, default 500, `0` disables) and renders it for operators via
-the `/export` command and `GET /health/diag`. Invariants the tests hold in
-place (`tests/logexport.test.mjs`):
-
-- Redaction happens **on capture**, before storage — a secret must never sit in
-  the buffer, and the rendered export is redacted again as a final net.
-- The ring evicts the oldest line when full; there is no unbounded retention.
-- The export is plain text with no parse mode, so log content cannot inject
-  MarkdownV2 entities.
-- Capture is in-memory only: a restart starts with an empty ring, and nothing
-  is written to `data/` or anywhere else.
-
-## Out of scope for fixtures
-
-- Signing transactions or holding keys
-- Real `@BotFather` tokens or production chat ids
-- Changing Mimir contract semantics
-- Making CI depend on live RPC or Telegram
+The bot keeps a bounded in-memory ring of 

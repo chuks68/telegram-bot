@@ -20,6 +20,6 @@
       "question": "Max fee market"
     }
   },
-  "md": "🆕 *New squad market* \\#4\nMax fee market\nCaptain: `GABCD…TUVW` · fee 10000 bps · deadline 2024\\-10\\-27T03:33:20\\.000Z\n_ledger 5039_",
-  "plain": "New squad market #4\nMax fee market\nCaptain: GABCD…TUVW · fee 10000 bps · deadline 2024-10-27T03:33:20.000Z\nledger 5039"
+  "md": "🆕 *New squad market* \\#4\nMax fee market\nCaptain: `GABCD…TUVW` · fee 10000 bps · deadline in 69d 9h \\(2024\\-10\\-27T03:33:20\\.000Z\\)\n_ledger 5039_",
+  "plain": "New squad market #4\nMax fee market\nCaptain: GABCD…TUVW · fee 10000 bps · deadline in 69d 9h (2024-10-27T03:33:20.000Z)\nledger 5039"
 }

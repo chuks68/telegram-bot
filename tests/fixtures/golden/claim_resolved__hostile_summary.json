@@ -20,6 +20,6 @@
       "evidenceHash": "ff00ff00"
     }
   },
-  "md": "⚖️ *Claim \\#25 resolved* — winner: *challengers*\nConfidence: 99%\n_Result: \\*yes\\* \\(confidence\\_high\\)\\. See \\[evidence\\]\\(https://example\\.com\\)\\._\n_ledger 5014_",
-  "plain": "Claim #25 resolved — winner: challengers\nConfidence: 99%\nResult: *yes* (confidence_high). See [evidence](https://example.com).\nledger 5014"
+  "md": "⚖️ *Claim \\#25 resolved* — winner: *challengers*\nConfidence: ██████████ 99%\n_Result: \\*yes\\* \\(confidence\\_high\\)\\. See \\[evidence\\]\\(https://example\\.com\\)\\._\n_ledger 5014_",
+  "plain": "Claim #25 resolved — winner: challengers\nConfidence: ██████████ 99%\nResult: *yes* (confidence_high). See [evidence](https://example.com).\nledger 5014"
 }

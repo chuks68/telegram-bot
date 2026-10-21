@@ -237,7 +237,7 @@ test("MarkdownV2-special characters arrive literally in plain text", () => {
     payload: { name: "claim_created", claimId: 9, creator: "GABCD", category: reserved },
   });
   const plain = formatPlainTextEvent(config, event);
-  assert.ok(plain.includes(`Category: ${reserved}`), "no escaping in plain text");
+  assert.ok(plain.includes(`Category: 🏷️ ${reserved}`), "no escaping in plain text");
   const md = formatEvent(config, event);
   assert.ok(md.includes("\\_\\*"), "MarkdownV2 path still escapes");
 });

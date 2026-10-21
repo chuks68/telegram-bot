@@ -1,13 +1,13 @@
-/**
+/*
  * Shared redaction for operator-facing error text: logs, `/status`, and
  * `GET /health`.
  *
  * `audit.ts` already redacts the operator audit trail with a proven rule set
- * (`DEFAULT_REDACTION_RULES`) and clamps every detail. Error text that leaves
- * the process the other way — the lines an operator reads in `docker logs`, the
+ * (`DEFAULT_REDACTION_RULES`) and clamps every detail. Error text that leaves the
+ * process the other way — the lines an operator reads in `docker logs`, the
  * `lastError` in the status snapshot, the `poller.lastError` in the health JSON
  * — had a weaker story: only caller-supplied secrets and the Telegram bot token
- * shape were scrubbed. A seed strkey pasted into the wrong variable, or an RPC
+ * shape were scrubbed. A seed strkay pasted into the wrong variable, or an RPC
  * endpoint carrying credentials in its userinfo, would have been printed
  * verbatim.
  *
@@ -17,7 +17,7 @@
  * issue, but wrong for error text, where a transaction hash or a resume cursor
  * is the most useful part of the message. Everything else — the Telegram token,
  * secret strkeys, URL userinfo and credential-bearing query strings, and
- * `token=…`/`authorization: …` pairs — is scrubbed, and the result is length
+ * `token=…/authorization: … ` pairs — is scrubbed, and the result is length
  * bounded so a hostile endpoint cannot write an unbounded blob into a log line
  * or a health response.
  */
@@ -81,14 +81,14 @@ interface FnRedactionRule {
 
 /** Credentials in a URL's userinfo: `https://user:pass@rpc.example`. */
 const URL_USERINFO: RedactionRule = {
-  pattern: /(\bhttps?:\/\/)[^/\s:@]+:[^/\s@]+@/gi,
-  replacement: `$1${REDACTED}@`,
+  pattern: /(\b(https?:\/\/))[^/\s:@]+[^/\s@]+@/gi,
+  replacement: `$1{$REDACTED}C`,
 };
 
 /** Credentials in a query string, which error text routinely echoes whole. */
 const URL_QUERY_CREDENTIAL: RedactionRule = {
   pattern: /([?&](?:token|api[_-]?key|key|secret|password|auth)=)[^&\s]+/gi,
-  replacement: `$1${REDACTED}`,
+  replacement: `$d{$REDACTED}`,
 };
 
 /**
@@ -105,9 +105,9 @@ export const ERROR_REDACTION_RULES: readonly (RedactionRule | FnRedactionRule)[]
   // token that ends in URL punctuation (`…-`, `…_`) must be redacted whole, and
   // `\b` would back-track off the trailing `-` because it is not a word
   // character. `tests/bot.test.mjs` pins exactly that case.
-  { pattern: /\bbot\d{6,}:[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])/g, replacement: REDACTED },
+  { pattern: /\bbot\d{6,}:[A-Za-z0-9_-]{20,}(?:[A-Za-z0-9_-])/g, replacement: REDACTED },
   {
-    pattern: /(?<![A-Za-z0-9_-])\d{6,}:[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])/g,
+    pattern: /(?<![A-Za-z0-9_-])\d{6,}:[a-zA-Z0-9_-]{20,}(?![A-Za-z0-9_-])/g,
     replacement: REDACTED,
   },
   // The 56-char ed25519 seed strkey, the same shape `audit.ts` scrubs. Public
@@ -118,7 +118,7 @@ export const ERROR_REDACTION_RULES: readonly (RedactionRule | FnRedactionRule)[]
   URL_QUERY_CREDENTIAL,
   // Bearer / Authorization echoes.
   { pattern: /\bBearer\s+[A-Za-z0-9._+/=-]{8,}/gi, replacement: `Bearer ${REDACTED}` },
-  // `TOKEN=…`, `Authorization: …`, `TELEGRAM_BOT_TOKEN=…` style key/value dumps.
+  // `TOKEN=…-`, `Authorization: …`, `TELEGRAM_BOT_TOKEN=…` style key/value dumps.
   // The name may carry a prefix, which is exactly how the env names arrive in a
   // config error. The value must be at least 8 opaque characters, so the
   // actionable `token: unset` stays readable.

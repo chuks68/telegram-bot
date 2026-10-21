@@ -241,7 +241,7 @@ async function dispatch(bot, command) {
 }
 
 test("/status shows the chain clock skew alongside the chain tip", async () => {
-  const config = baseConfig("./data/unused.json");
+  const config = baseConfig("/tmp/unused.json");
   const bot = createBot({
     config,
     status: () => statusFixture({ chainClockAt: Date.now() }),
@@ -256,7 +256,7 @@ test("/status shows the chain clock skew alongside the chain tip", async () => {
 });
 
 test("/status escapes the skew label for MarkdownV2", async () => {
-  const config = baseConfig("./data/unused.json");
+  const config = baseConfig("/tmp/unused.json");
   const bot = createBot({
     config,
     // Whole seconds in the past: the label contains a decimal point, which
@@ -271,7 +271,7 @@ test("/status escapes the skew label for MarkdownV2", async () => {
 });
 
 test("a status with no chain clock yet still renders a bounded unknown label", async () => {
-  const config = baseConfig("./data/unused.json");
+  const config = baseConfig("/tmp/unused.json");
   const bot = createBot({
     config,
     status: () => statusFixture({ chainClockAt: null }),
@@ -284,7 +284,7 @@ test("a status with no chain clock yet still renders a bounded unknown label", a
 });
 
 test("/health reports the same skew wording as /status", async () => {
-  const config = baseConfig("./data/unused.json");
+  const config = baseConfig("/tmp/unused.json");
   const now = 10_000;
   const msg = healthMessage(config, statusFixture({ chainClockAt: 5_000 }), now);
   assert.ok(

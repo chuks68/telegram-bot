@@ -277,17 +277,23 @@ test("NOTIFICATION_MD.claimResolved with summary produces correct snapshot", () 
   const result = NOTIFICATION_MD.claimResolved(
     "7",
     "challengers",
-    "100",
+    "██████████ 100%",
     "Onchain smoke \\— challengers awarded",
   );
   assert.match(result, /⚖️ \*Claim \\#7 resolved\* — winner: \*challengers\*/);
-  assert.match(result, /Confidence: 100%/);
+  assert.match(result, /Confidence: ██████████ 100%/);
   assert.match(result, /_Onchain smoke/);
 });
 
 test("NOTIFICATION_MD.claimResolved without summary omits the summary line", () => {
-  const result = NOTIFICATION_MD.claimResolved("7", "claimant", "85", null);
+  const result = NOTIFICATION_MD.claimResolved(
+    "7",
+    "claimant",
+    "████████░░ 85%",
+    null,
+  );
   assert.match(result, /⚖️ \*Claim \\#7 resolved\*/);
+  assert.match(result, /Confidence: ████████░░ 85%/);
   assert.equal(result.trimEnd(), result); // no trailing whitespace/newline
   assert.equal(result.includes("_"), false); // no italic syntax
 });
@@ -436,14 +442,14 @@ test("NOTIFICATION_PLAIN.claimChallenged produces plain-text snapshot", () => {
 });
 
 test("NOTIFICATION_PLAIN.claimResolved with summary", () => {
-  const result = NOTIFICATION_PLAIN.claimResolved(7, "challengers", "100", "summary text");
+  const result = NOTIFICATION_PLAIN.claimResolved(7, "challengers", "██████████ 100%", "summary text");
   assert.match(result, /Claim #7 resolved — winner: challengers/);
   assert.match(result, /\nsummary text/);
 });
 
 test("NOTIFICATION_PLAIN.claimResolved without summary omits the line", () => {
-  const result = NOTIFICATION_PLAIN.claimResolved(7, "claimant", "85", null);
-  assert.match(result, /Confidence: 85%/);
+  const result = NOTIFICATION_PLAIN.claimResolved(7, "claimant", "████████░░ 85%", null);
+  assert.match(result, /Confidence: ████████░░ 85%/);
   assert.equal(result.endsWith("%"), true);
 });
 
@@ -571,7 +577,7 @@ test("formatPlainTextEvent for claim_created uses NOTIFICATION_PLAIN.claimCreate
   const result = formatPlainTextEvent(config, event);
   assert.ok(result !== null);
   assert.match(result, /New claim #99/);
-  assert.match(result, /Category: sports/);
+  assert.match(result, /Category: ⚽ sports/);
   assert.equal(result.includes("*"), false); // no Markdown
 });
 
@@ -632,7 +638,7 @@ test("claim_created MarkdownV2 snapshot matches i18n template exactly", () => {
   const event = marketEvent({ name: "claim_created", claimId: 7, category: "crypto", creator: "GABCD" });
   const result = formatEvent(config, event);
   const expected =
-    "🆕 *New claim* \\#7\nCategory: crypto\nCreator: `GABCD`\n_ledger 42_";
+    "🆕 *New claim* \\#7\nCategory: 🪙 crypto\nCreator: `GABCD`\n_ledger 42_";
   assert.equal(result, expected);
 });
 

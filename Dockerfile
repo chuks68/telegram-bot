@@ -33,8 +33,9 @@ COPY --from=builder /app/dist ./dist
 # Install only production dependencies
 RUN npm ci --omit=dev
 
-# Set ownership to the non-root user
-RUN chown -R nodejs:nodejs /app
+# Prepare data directory for the named volume and set ownership to the non-root user
+RUN mkdir -p /app/data && \
+    chown -R nodejs:nodejs /app
 
 # Switch to the non-root user
 USER nodejs

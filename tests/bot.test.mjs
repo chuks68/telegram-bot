@@ -67,6 +67,8 @@ function mockedBot(deps) {
     command(name, handler) {
       handlers.set(name, handler);
     },
+    // Stub for the pause confirmation inline-keyboard callback registrations.
+    callbackQuery(_filter, _handler) {},
   };
   registerCommandHandlers(bot, deps);
   return { bot, handlers };

@@ -57,7 +57,7 @@ describe("railway.json vs repo defaults", () => {
     assert.equal(path.posix.basename(rail.deploy.requiredMountPath), "data");
     const configSrc = await readFile(new URL("../src/config.ts", import.meta.url), "utf8");
     assert.ok(
-      configSrc.includes('cursorFile: "./data/cursor.json"'),
+      configSrc.includes('cursorFile: "./data/cursor.json"'), // hermetic-data: allow (verifies production config default)
       "DEFAULTS.cursorFile must live under the mounted data/ directory",
     );
   });
